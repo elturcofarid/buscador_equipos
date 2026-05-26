@@ -6,6 +6,8 @@ Fecha: 2026-05-26
 
 - Proyecto Expo real en `apps/mobile`.
 - Listado de busquedas activas contra la API.
+- Navegacion con barra inferior entre busquedas, postulaciones y cuenta.
+- Pantalla separada para detalle de busqueda y postulacion.
 - Login de jugador.
 - Guardado automatico de perfil base tras login.
 - Seleccion de busqueda.
@@ -50,6 +52,7 @@ http://localhost:3004/api/v1
 - Edicion de perfil deportivo: OK.
 - Restauracion de sesion tras recarga: OK.
 - Cierre de sesion y limpieza de sesion guardada: OK.
+- Navegacion mobile entre busquedas, detalle, postulaciones y cuenta: OK.
 
 ## Resultado observado
 
@@ -62,6 +65,8 @@ http://localhost:3004/api/v1
 - Tras guardar el perfil, la app mostro confirmacion: `Perfil guardado`.
 - Tras recargar, la app mostro: `Sesion restaurada`.
 - Tras cerrar sesion y recargar, la sesion volvio a `No`.
+- La lista de busquedas abrio una pantalla de detalle separada.
+- La barra inferior permitio cambiar entre `Buscar`, `Postulaciones` y `Cuenta`.
 
 ## Limitacion local
 
@@ -74,6 +79,4 @@ PORT=3007 npm run serve:web -w @bpf/mobile
 
 ## Siguiente paso recomendado
 
-- Preparar navegacion mobile real antes de sumar chat.
-- Mejorar navegacion mobile real.
-- Luego sumar chat asincrono entre jugador y club.
+- Sumar chat asincrono entre jugador y club.

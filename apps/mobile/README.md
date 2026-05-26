@@ -24,6 +24,8 @@ http://localhost:3007
 ## Funciones actuales
 
 - Listar busquedas activas.
+- Navegacion con barra inferior entre busquedas, postulaciones y cuenta.
+- Pantalla separada para detalle de busqueda.
 - Login de jugador.
 - Restaurar sesion guardada al volver a abrir la app.
 - Crear/actualizar perfil base despues de login.

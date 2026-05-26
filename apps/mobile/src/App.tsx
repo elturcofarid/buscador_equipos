@@ -35,7 +35,7 @@ import {
   storeSession
 } from "./sessionStorage";
 
-type ViewMode = "search" | "applications" | "account";
+type ViewMode = "search" | "opportunityDetail" | "applications" | "account";
 type AuthMode = "login" | "register";
 type ProfileForm = {
   displayName: string;
@@ -90,6 +90,7 @@ export default function App() {
       opportunities[0],
     [opportunities, selectedOpportunityId]
   );
+  const screenTitle = getScreenTitle(viewMode);
 
   useEffect(() => {
     void refreshOpportunities();
@@ -344,11 +345,11 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.shell}>
+      <ScrollView contentContainerStyle={styles.shell} style={styles.scrollArea}>
         <View style={styles.header}>
           <View>
             <Text style={styles.eyebrow}>Comunidad de Madrid</Text>
-            <Text style={styles.title}>Buscador Futbol</Text>
+            <Text style={styles.title}>{screenTitle}</Text>
           </View>
           <Pressable
             style={styles.iconButton}
@@ -370,40 +371,30 @@ export default function App() {
           />
         </View>
 
-        <View style={styles.segmented}>
-          <SegmentButton
-            active={viewMode === "search"}
-            label="Buscar"
-            onPress={() => setViewMode("search")}
-          />
-          <SegmentButton
-            active={viewMode === "applications"}
-            label="Postulaciones"
-            onPress={() => {
-              setViewMode("applications");
-              void refreshApplications();
-            }}
-          />
-          <SegmentButton
-            active={viewMode === "account"}
-            label="Cuenta"
-            onPress={() => setViewMode("account")}
-          />
-        </View>
-
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
         {viewMode === "search" ? (
           <SearchView
             loading={loading}
-            message={message}
             opportunities={opportunities}
-            selectedOpportunity={selectedOpportunity}
             selectedOpportunityId={selectedOpportunityId}
+            onOpenOpportunity={(opportunityId) => {
+              setSelectedOpportunityId(opportunityId);
+              setViewMode("opportunityDetail");
+            }}
+          />
+        ) : null}
+
+        {viewMode === "opportunityDetail" ? (
+          <OpportunityDetailView
+            loading={loading}
+            message={message}
+            selectedOpportunity={selectedOpportunity}
             session={session}
             setMessage={setMessage}
-            setSelectedOpportunityId={setSelectedOpportunityId}
             onApply={handleApply}
+            onBack={() => setViewMode("search")}
+            onLoginPress={() => setViewMode("account")}
           />
         ) : null}
 
@@ -444,116 +435,181 @@ export default function App() {
 
         <Text style={styles.footer}>API: {API_BASE_URL}</Text>
       </ScrollView>
+      <BottomNavigation
+        applicationsCount={applications.length}
+        sessionActive={Boolean(session)}
+        viewMode={viewMode}
+        onSelect={(nextViewMode) => {
+          setViewMode(nextViewMode);
+          if (nextViewMode === "applications") {
+            void refreshApplications();
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }
 
 function SearchView({
   loading,
-  message,
   opportunities,
-  selectedOpportunity,
   selectedOpportunityId,
+  onOpenOpportunity
+}: {
+  loading: boolean;
+  opportunities: Opportunity[];
+  selectedOpportunityId: string | null;
+  onOpenOpportunity: (opportunityId: string) => void;
+}) {
+  return (
+    <View style={styles.screen}>
+      <View style={styles.sectionHeader}>
+        <View>
+          <Text style={styles.panelTitle}>Busquedas activas</Text>
+          <Text style={styles.sectionHint}>
+            Selecciona una busqueda para ver el detalle y postular.
+          </Text>
+        </View>
+        {loading ? <ActivityIndicator color="#157f58" /> : null}
+      </View>
+
+      {opportunities.length === 0 ? (
+        <View style={styles.panel}>
+          <Text style={styles.emptyText}>No hay busquedas activas.</Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {opportunities.map((opportunity) => {
+            const active = opportunity.id === selectedOpportunityId;
+            return (
+              <Pressable
+                key={opportunity.id}
+                onPress={() => onOpenOpportunity(opportunity.id)}
+                style={({ pressed }) => [
+                  styles.opportunityItem,
+                  active && styles.opportunityItemActive,
+                  pressed && styles.pressed
+                ]}
+              >
+                <View style={styles.itemHeader}>
+                  <Text style={styles.itemTitle}>{opportunity.title}</Text>
+                  <Text style={styles.badge}>
+                    {formatModality(opportunity.modality)}
+                  </Text>
+                </View>
+                <Text style={styles.itemClub}>{opportunity.club.name}</Text>
+                <Text style={styles.itemMeta}>
+                  {opportunity.primaryPosition} -{" "}
+                  {opportunity.locationLabel ?? "Zona sin definir"}
+                </Text>
+                <View style={styles.itemFooter}>
+                  <Text style={styles.itemMeta}>
+                    {formatAgeRange(opportunity)} -{" "}
+                    {formatOpportunityType(opportunity.opportunityType)}
+                  </Text>
+                  <Text style={styles.linkText}>Ver detalle</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function OpportunityDetailView({
+  loading,
+  message,
+  selectedOpportunity,
   session,
   setMessage,
-  setSelectedOpportunityId,
-  onApply
+  onApply,
+  onBack,
+  onLoginPress
 }: {
   loading: boolean;
   message: string;
-  opportunities: Opportunity[];
   selectedOpportunity?: Opportunity;
-  selectedOpportunityId: string | null;
   session: Session | null;
   setMessage: (value: string) => void;
-  setSelectedOpportunityId: (value: string) => void;
   onApply: () => void;
+  onBack: () => void;
+  onLoginPress: () => void;
 }) {
-  return (
-    <View style={styles.contentGrid}>
-      <View style={styles.panel}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.panelTitle}>Busquedas activas</Text>
-          {loading ? <ActivityIndicator color="#157f58" /> : null}
-        </View>
-
-        {opportunities.length === 0 ? (
-          <Text style={styles.emptyText}>No hay busquedas activas.</Text>
-        ) : (
-          <View style={styles.list}>
-            {opportunities.map((opportunity) => {
-              const active = opportunity.id === selectedOpportunityId;
-              return (
-                <Pressable
-                  key={opportunity.id}
-                  onPress={() => setSelectedOpportunityId(opportunity.id)}
-                  style={({ pressed }) => [
-                    styles.opportunityItem,
-                    active && styles.opportunityItemActive,
-                    pressed && styles.pressed
-                  ]}
-                >
-                  <View style={styles.itemHeader}>
-                    <Text style={styles.itemTitle}>{opportunity.title}</Text>
-                    <Text style={styles.badge}>
-                      {formatModality(opportunity.modality)}
-                    </Text>
-                  </View>
-                  <Text style={styles.itemClub}>{opportunity.club.name}</Text>
-                  <Text style={styles.itemMeta}>
-                    {opportunity.primaryPosition} -{" "}
-                    {opportunity.locationLabel ?? "Zona sin definir"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-      </View>
-
+  if (!selectedOpportunity) {
+    return (
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Detalle</Text>
-        {selectedOpportunity ? (
-          <View style={styles.detail}>
+        <Text style={styles.emptyText}>Selecciona una busqueda.</Text>
+        <Pressable onPress={onBack} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Volver</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screen}>
+      <Pressable onPress={onBack} style={styles.backButton}>
+        <Text style={styles.backButtonText}>Volver a busquedas</Text>
+      </Pressable>
+
+      <View style={styles.panel}>
+        <View style={styles.detail}>
+          <View style={styles.itemHeader}>
             <Text style={styles.detailTitle}>{selectedOpportunity.title}</Text>
-            <Text style={styles.detailClub}>{selectedOpportunity.club.name}</Text>
-            <Text style={styles.description}>{selectedOpportunity.description}</Text>
-            <View style={styles.detailGrid}>
-              <Info label="Posicion" value={selectedOpportunity.primaryPosition} />
-              <Info
-                label="Categoria"
-                value={selectedOpportunity.category ?? "Sin categoria"}
-              />
-              <Info label="Edad" value={formatAgeRange(selectedOpportunity)} />
-              <Info
-                label="Tipo"
-                value={formatOpportunityType(selectedOpportunity.opportunityType)}
-              />
-            </View>
-            <TextInput
-              multiline
-              onChangeText={setMessage}
-              placeholder="Mensaje para el club"
-              style={[styles.input, styles.messageInput]}
-              value={message}
+            <Text style={styles.badge}>
+              {formatModality(selectedOpportunity.modality)}
+            </Text>
+          </View>
+          <Text style={styles.detailClub}>{selectedOpportunity.club.name}</Text>
+          <Text style={styles.description}>{selectedOpportunity.description}</Text>
+          <View style={styles.detailGrid}>
+            <Info label="Posicion" value={selectedOpportunity.primaryPosition} />
+            <Info
+              label="Categoria"
+              value={selectedOpportunity.category ?? "Sin categoria"}
             />
+            <Info label="Edad" value={formatAgeRange(selectedOpportunity)} />
+            <Info
+              label="Tipo"
+              value={formatOpportunityType(selectedOpportunity.opportunityType)}
+            />
+            <Info
+              label="Zona"
+              value={selectedOpportunity.locationLabel ?? "Sin definir"}
+            />
+          </View>
+          <TextInput
+            multiline
+            onChangeText={setMessage}
+            placeholder="Mensaje para el club"
+            style={[styles.input, styles.messageInput]}
+            value={message}
+          />
+          {session ? (
             <Pressable
-              disabled={loading || !session}
+              disabled={loading}
               onPress={onApply}
               style={({ pressed }) => [
                 styles.primaryButton,
                 pressed && styles.pressed,
-                (!session || loading) && styles.disabled
+                loading && styles.disabled
               ]}
             >
               <Text style={styles.primaryButtonText}>
-                {session ? "Postular" : "Inicia sesion para postular"}
+                {loading ? "Enviando..." : "Postular"}
               </Text>
             </Pressable>
-          </View>
-        ) : (
-          <Text style={styles.emptyText}>Selecciona una busqueda.</Text>
-        )}
+          ) : (
+            <Pressable onPress={onLoginPress} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>
+                Inicia sesion para postular
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -860,6 +916,81 @@ function AccountView({
   );
 }
 
+function BottomNavigation({
+  applicationsCount,
+  sessionActive,
+  viewMode,
+  onSelect
+}: {
+  applicationsCount: number;
+  sessionActive: boolean;
+  viewMode: ViewMode;
+  onSelect: (nextViewMode: "search" | "applications" | "account") => void;
+}) {
+  return (
+    <View style={styles.bottomNavigation}>
+      <BottomNavigationButton
+        active={viewMode === "search" || viewMode === "opportunityDetail"}
+        label="Buscar"
+        meta="Clubes"
+        onPress={() => onSelect("search")}
+      />
+      <BottomNavigationButton
+        active={viewMode === "applications"}
+        label="Postulaciones"
+        meta={String(applicationsCount)}
+        onPress={() => onSelect("applications")}
+      />
+      <BottomNavigationButton
+        active={viewMode === "account"}
+        label="Cuenta"
+        meta={sessionActive ? "Activa" : "Entrar"}
+        onPress={() => onSelect("account")}
+      />
+    </View>
+  );
+}
+
+function BottomNavigationButton({
+  active,
+  label,
+  meta,
+  onPress
+}: {
+  active: boolean;
+  label: string;
+  meta: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.bottomNavigationButton,
+        active && styles.bottomNavigationButtonActive,
+        pressed && styles.pressed
+      ]}
+    >
+      <Text
+        style={[
+          styles.bottomNavigationLabel,
+          active && styles.bottomNavigationLabelActive
+        ]}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[
+          styles.bottomNavigationMeta,
+          active && styles.bottomNavigationMetaActive
+        ]}
+      >
+        {meta}
+      </Text>
+    </Pressable>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.metric}>
@@ -939,6 +1070,17 @@ function cleanString(value: string) {
   return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
+function getScreenTitle(viewMode: ViewMode) {
+  const titles: Record<ViewMode, string> = {
+    account: "Cuenta",
+    applications: "Postulaciones",
+    opportunityDetail: "Detalle",
+    search: "Buscador Futbol"
+  };
+
+  return titles[viewMode];
+}
+
 function formatModality(modality: string) {
   return modality.replace("FOOTBALL_", "F").replace("_", " ");
 }
@@ -995,11 +1137,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#f4f7f6",
     flex: 1
   },
+  scrollArea: {
+    flex: 1
+  },
   shell: {
     gap: 14,
     marginHorizontal: "auto",
     maxWidth: 1040,
     padding: 18,
+    paddingBottom: 28,
     width: "100%"
   },
   header: {
@@ -1170,6 +1316,9 @@ const styles = StyleSheet.create({
     color: "#16201d",
     padding: 12
   },
+  screen: {
+    gap: 12
+  },
   contentGrid: {
     gap: 14
   },
@@ -1178,6 +1327,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     justifyContent: "space-between"
+  },
+  sectionHint: {
+    color: "#64726e",
+    fontSize: 13,
+    marginTop: 3
   },
   list: {
     gap: 10
@@ -1220,6 +1374,33 @@ const styles = StyleSheet.create({
   itemMeta: {
     color: "#64726e",
     fontSize: 13
+  },
+  itemFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    marginTop: 2
+  },
+  linkText: {
+    color: "#157f58",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  backButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#ffffff",
+    borderColor: "#d8e0dd",
+    borderRadius: 8,
+    borderWidth: 1,
+    minHeight: 40,
+    justifyContent: "center",
+    paddingHorizontal: 12
+  },
+  backButtonText: {
+    color: "#16201d",
+    fontWeight: "800"
   },
   badge: {
     backgroundColor: "#eaf4ff",
@@ -1293,6 +1474,43 @@ const styles = StyleSheet.create({
     color: "#64726e",
     fontSize: 12,
     textAlign: "center"
+  },
+  bottomNavigation: {
+    backgroundColor: "#ffffff",
+    borderColor: "#d8e0dd",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  bottomNavigationButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    flex: 1,
+    gap: 2,
+    minHeight: 52,
+    justifyContent: "center",
+    paddingHorizontal: 8
+  },
+  bottomNavigationButtonActive: {
+    backgroundColor: "#e7efec"
+  },
+  bottomNavigationLabel: {
+    color: "#64726e",
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  bottomNavigationLabelActive: {
+    color: "#16201d"
+  },
+  bottomNavigationMeta: {
+    color: "#64726e",
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  bottomNavigationMetaActive: {
+    color: "#0f5e42"
   },
   pressed: {
     opacity: 0.75
