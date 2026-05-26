@@ -16,8 +16,12 @@ import {
   API_BASE_URL,
   Opportunity,
   PlayerApplication,
+  PlayerProfile,
+  PlayerProfilePayload,
   Session,
   applyToOpportunity,
+  getCurrentSession,
+  getPlayerProfile,
   listMyApplications,
   listOpportunities,
   login,
@@ -25,17 +29,36 @@ import {
   savePlayerProfile,
   withdrawApplication
 } from "./api";
+import {
+  clearStoredSession,
+  loadStoredSession,
+  storeSession
+} from "./sessionStorage";
 
 type ViewMode = "search" | "applications" | "account";
 type AuthMode = "login" | "register";
+type ProfileForm = {
+  displayName: string;
+  primaryPosition: string;
+  modality: string;
+  availabilityStatus: string;
+  locationLabel: string;
+  searchRadiusKm: string;
+  category: string;
+  dominantFoot: string;
+  bio: string;
+};
 
-const defaultProfile = {
+const defaultProfileForm: ProfileForm = {
   displayName: "Jugador Candidato",
   primaryPosition: "Portero",
   modality: "FOOTBALL_11",
   availabilityStatus: "Disponible",
   locationLabel: "Madrid",
-  searchRadiusKm: 30
+  searchRadiusKm: "30",
+  category: "Senior",
+  dominantFoot: "Derecho",
+  bio: ""
 };
 
 export default function App() {
@@ -46,6 +69,8 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [session, setSession] = useState<Session | null>(null);
+  const [profileForm, setProfileForm] =
+    useState<ProfileForm>(defaultProfileForm);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [applications, setApplications] = useState<PlayerApplication[]>([]);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<
@@ -55,6 +80,8 @@ export default function App() {
     "Estoy disponible para una prueba esta semana."
   );
   const [loading, setLoading] = useState(false);
+  const [sessionRestoring, setSessionRestoring] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
   const selectedOpportunity = useMemo(
@@ -66,6 +93,7 @@ export default function App() {
 
   useEffect(() => {
     void refreshOpportunities();
+    void restorePreviousSession();
   }, []);
 
   async function refreshOpportunities() {
@@ -112,14 +140,85 @@ export default function App() {
     }
   }
 
-  async function finishSession(nextSession: Session, successMessage: string) {
+  async function restorePreviousSession() {
+    setSessionRestoring(true);
+
+    try {
+      const storedSession = await loadStoredSession();
+
+      if (!storedSession) {
+        return;
+      }
+
+      const verifiedSession = await getCurrentSession(storedSession.accessToken);
+      await activateSession(verifiedSession, "Sesion restaurada");
+    } catch {
+      await clearStoredSession();
+      setSession(null);
+      setApplications([]);
+      setNotice("La sesion guardada vencio. Vuelve a entrar.");
+    } finally {
+      setSessionRestoring(false);
+    }
+  }
+
+  async function activateSession(nextSession: Session, successMessage: string) {
     setSession(nextSession);
-    await savePlayerProfile(nextSession.accessToken, {
-      ...defaultProfile,
-      displayName: nextSession.user.fullName || fullName
-    });
+    setEmail(nextSession.user.email);
+    setFullName(nextSession.user.fullName || fullName);
+    await storeSession(nextSession);
+    await ensurePlayerProfile(nextSession);
     await refreshApplications(nextSession.accessToken);
     setNotice(successMessage);
+  }
+
+  async function ensurePlayerProfile(nextSession: Session) {
+    const profile =
+      nextSession.user.playerProfile ??
+      (await getPlayerProfile(nextSession.accessToken));
+
+    if (profile) {
+      syncProfileForm(profile, nextSession.user.fullName);
+      return;
+    }
+
+    const createdProfile = await savePlayerProfile(
+      nextSession.accessToken,
+      buildProfilePayload(
+        {
+          ...defaultProfileForm,
+          displayName: nextSession.user.fullName || defaultProfileForm.displayName
+        },
+        nextSession.user.fullName
+      )
+    );
+    syncProfileForm(createdProfile, nextSession.user.fullName);
+  }
+
+  function syncProfileForm(profile: PlayerProfile, fallbackDisplayName: string) {
+    setProfileForm({
+      displayName:
+        profile.displayName ?? fallbackDisplayName ?? defaultProfileForm.displayName,
+      primaryPosition:
+        profile.primaryPosition ?? defaultProfileForm.primaryPosition,
+      modality: profile.modality ?? defaultProfileForm.modality,
+      availabilityStatus:
+        profile.availabilityStatus ?? defaultProfileForm.availabilityStatus,
+      locationLabel: profile.locationLabel ?? defaultProfileForm.locationLabel,
+      searchRadiusKm: String(
+        profile.searchRadiusKm ?? defaultProfileForm.searchRadiusKm
+      ),
+      category: profile.category ?? defaultProfileForm.category,
+      dominantFoot: profile.dominantFoot ?? defaultProfileForm.dominantFoot,
+      bio: profile.bio ?? defaultProfileForm.bio
+    });
+  }
+
+  function updateProfileField(field: keyof ProfileForm, value: string) {
+    setProfileForm((currentProfile) => ({
+      ...currentProfile,
+      [field]: value
+    }));
   }
 
   async function handleLogin() {
@@ -128,7 +227,7 @@ export default function App() {
 
     try {
       const nextSession = await login(email.trim(), password);
-      await finishSession(nextSession, "Sesion iniciada y perfil base listo");
+      await activateSession(nextSession, "Sesion iniciada");
       setViewMode("search");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo entrar");
@@ -148,7 +247,7 @@ export default function App() {
         dateOfBirth,
         password
       });
-      await finishSession(nextSession, "Cuenta creada y perfil base listo");
+      await activateSession(nextSession, "Cuenta creada y sesion guardada");
       setViewMode("search");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo registrar");
@@ -209,9 +308,35 @@ export default function App() {
     }
   }
 
-  function logout() {
+  async function handleSaveProfile() {
+    if (!session) {
+      return;
+    }
+
+    setProfileSaving(true);
+    setNotice("");
+
+    try {
+      const savedProfile = await savePlayerProfile(
+        session.accessToken,
+        buildProfilePayload(profileForm, session.user.fullName)
+      );
+      syncProfileForm(savedProfile, session.user.fullName);
+      setNotice("Perfil guardado");
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "No se pudo guardar el perfil"
+      );
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function logout() {
+    await clearStoredSession();
     setSession(null);
     setApplications([]);
+    setPassword("");
     setNotice("");
     setViewMode("account");
   }
@@ -239,7 +364,10 @@ export default function App() {
         <View style={styles.statusRow}>
           <Metric label="Busquedas" value={String(opportunities.length)} />
           <Metric label="Postulaciones" value={String(applications.length)} />
-          <Metric label="Sesion" value={session ? "Activa" : "No"} />
+          <Metric
+            label="Sesion"
+            value={sessionRestoring ? "Cargando" : session ? "Activa" : "No"}
+          />
         </View>
 
         <View style={styles.segmented}>
@@ -298,15 +426,19 @@ export default function App() {
             fullName={fullName}
             loading={loading}
             password={password}
+            profileForm={profileForm}
+            profileSaving={profileSaving}
             session={session}
             setAuthMode={setAuthMode}
             setDateOfBirth={setDateOfBirth}
             setEmail={setEmail}
             setFullName={setFullName}
             setPassword={setPassword}
+            updateProfileField={updateProfileField}
             onLogin={handleLogin}
             onLogout={logout}
             onRegister={handleRegister}
+            onSaveProfile={handleSaveProfile}
           />
         ) : null}
 
@@ -507,15 +639,19 @@ function AccountView({
   fullName,
   loading,
   password,
+  profileForm,
+  profileSaving,
   session,
   setAuthMode,
   setDateOfBirth,
   setEmail,
   setFullName,
   setPassword,
+  updateProfileField,
   onLogin,
   onLogout,
-  onRegister
+  onRegister,
+  onSaveProfile
 }: {
   authMode: AuthMode;
   dateOfBirth: string;
@@ -523,25 +659,130 @@ function AccountView({
   fullName: string;
   loading: boolean;
   password: string;
+  profileForm: ProfileForm;
+  profileSaving: boolean;
   session: Session | null;
   setAuthMode: (value: AuthMode) => void;
   setDateOfBirth: (value: string) => void;
   setEmail: (value: string) => void;
   setFullName: (value: string) => void;
   setPassword: (value: string) => void;
+  updateProfileField: (field: keyof ProfileForm, value: string) => void;
   onLogin: () => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
   onRegister: () => void;
+  onSaveProfile: () => void;
 }) {
   if (session) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>{session.user.fullName}</Text>
-        <Text style={styles.sessionText}>{session.user.email}</Text>
-        <Info label="Rol" value={session.user.primaryRole} />
-        <Pressable onPress={onLogout} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Cerrar sesion</Text>
-        </Pressable>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.panelTitle}>Cuenta jugador</Text>
+            <Text style={styles.sessionText}>{session.user.email}</Text>
+          </View>
+          <Pressable onPress={() => void onLogout()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Cerrar sesion</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.profileSummary}>
+          <Info label="Nombre legal" value={session.user.fullName} />
+          <Info label="Rol" value={session.user.primaryRole} />
+        </View>
+
+        <View style={styles.form}>
+          <Text style={styles.formTitle}>Perfil deportivo</Text>
+          <TextInput
+            onChangeText={(value) => updateProfileField("displayName", value)}
+            placeholder="Nombre visible"
+            style={styles.input}
+            value={profileForm.displayName}
+          />
+          <TextInput
+            onChangeText={(value) =>
+              updateProfileField("primaryPosition", value)
+            }
+            placeholder="Posicion principal"
+            style={styles.input}
+            value={profileForm.primaryPosition}
+          />
+          <Text style={styles.fieldLabel}>Modalidad</Text>
+          <View style={styles.segmentedCompact}>
+            <SegmentButton
+              active={profileForm.modality === "FOOTBALL_11"}
+              label="F11"
+              onPress={() => updateProfileField("modality", "FOOTBALL_11")}
+            />
+            <SegmentButton
+              active={profileForm.modality === "FOOTBALL_7"}
+              label="F7"
+              onPress={() => updateProfileField("modality", "FOOTBALL_7")}
+            />
+            <SegmentButton
+              active={profileForm.modality === "FUTSAL"}
+              label="Futsal"
+              onPress={() => updateProfileField("modality", "FUTSAL")}
+            />
+          </View>
+          <TextInput
+            onChangeText={(value) =>
+              updateProfileField("availabilityStatus", value)
+            }
+            placeholder="Disponibilidad"
+            style={styles.input}
+            value={profileForm.availabilityStatus}
+          />
+          <TextInput
+            onChangeText={(value) => updateProfileField("locationLabel", value)}
+            placeholder="Ubicacion"
+            style={styles.input}
+            value={profileForm.locationLabel}
+          />
+          <View style={styles.inlineFields}>
+            <TextInput
+              inputMode="numeric"
+              onChangeText={(value) =>
+                updateProfileField("searchRadiusKm", value)
+              }
+              placeholder="Radio km"
+              style={[styles.input, styles.inlineInput]}
+              value={profileForm.searchRadiusKm}
+            />
+            <TextInput
+              onChangeText={(value) => updateProfileField("category", value)}
+              placeholder="Categoria"
+              style={[styles.input, styles.inlineInput]}
+              value={profileForm.category}
+            />
+          </View>
+          <TextInput
+            onChangeText={(value) => updateProfileField("dominantFoot", value)}
+            placeholder="Pierna dominante"
+            style={styles.input}
+            value={profileForm.dominantFoot}
+          />
+          <TextInput
+            multiline
+            onChangeText={(value) => updateProfileField("bio", value)}
+            placeholder="Bio deportiva"
+            style={[styles.input, styles.bioInput]}
+            value={profileForm.bio}
+          />
+          <Pressable
+            disabled={profileSaving}
+            onPress={onSaveProfile}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.pressed,
+              profileSaving && styles.disabled
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>
+              {profileSaving ? "Guardando..." : "Guardar perfil"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -660,6 +901,42 @@ function Info({ label, value }: { label: string; value: string }) {
       <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
+}
+
+function buildProfilePayload(
+  profileForm: ProfileForm,
+  fallbackDisplayName: string
+): PlayerProfilePayload {
+  const radiusKm = Number.parseInt(profileForm.searchRadiusKm, 10);
+  const safeRadiusKm = Number.isFinite(radiusKm)
+    ? Math.min(Math.max(radiusKm, 1), 200)
+    : Number(defaultProfileForm.searchRadiusKm);
+
+  return {
+    displayName:
+      cleanString(profileForm.displayName) ||
+      fallbackDisplayName ||
+      defaultProfileForm.displayName,
+    primaryPosition:
+      cleanString(profileForm.primaryPosition) ??
+      defaultProfileForm.primaryPosition,
+    modality: profileForm.modality || defaultProfileForm.modality,
+    availabilityStatus:
+      cleanString(profileForm.availabilityStatus) ??
+      defaultProfileForm.availabilityStatus,
+    locationLabel:
+      cleanString(profileForm.locationLabel) ?? defaultProfileForm.locationLabel,
+    searchRadiusKm: safeRadiusKm,
+    category: cleanString(profileForm.category),
+    dominantFoot: cleanString(profileForm.dominantFoot),
+    bio: cleanString(profileForm.bio),
+    visibilityLevel: "VERIFIED_CLUBS_ONLY"
+  };
+}
+
+function cleanString(value: string) {
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
 function formatModality(modality: string) {
@@ -825,8 +1102,28 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900"
   },
+  profileSummary: {
+    gap: 8
+  },
   form: {
     gap: 10
+  },
+  formTitle: {
+    color: "#16201d",
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  fieldLabel: {
+    color: "#64726e",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  inlineFields: {
+    flexDirection: "row",
+    gap: 10
+  },
+  inlineInput: {
+    flex: 1
   },
   input: {
     backgroundColor: "#fbfdfc",
@@ -982,6 +1279,10 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     minHeight: 88,
+    textAlignVertical: "top"
+  },
+  bioInput: {
+    minHeight: 96,
     textAlignVertical: "top"
   },
   emptyText: {

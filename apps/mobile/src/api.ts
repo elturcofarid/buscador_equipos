@@ -1,23 +1,45 @@
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3004/api/v1";
 
-export type SessionUser = {
-  id: string;
-  email: string;
-  fullName: string;
-  primaryRole: string;
-};
-
-export type Session = {
-  accessToken: string;
-  user: SessionUser;
-};
-
 export type RegisterPayload = {
   email: string;
   fullName: string;
   dateOfBirth: string;
   password: string;
+};
+
+export type PlayerProfile = {
+  id: string;
+  userId: string;
+  displayName: string | null;
+  gender: string | null;
+  primaryPosition: string | null;
+  secondaryPositions: string[];
+  dominantFoot: string | null;
+  category: string | null;
+  modality: string | null;
+  availabilityStatus: string | null;
+  locationLabel: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
+  searchRadiusKm: number | null;
+  bio: string | null;
+  visibilityLevel: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SessionUser = {
+  id: string;
+  email: string;
+  fullName: string;
+  primaryRole: string;
+  playerProfile?: PlayerProfile | null;
+};
+
+export type Session = {
+  accessToken: string;
+  user: SessionUser;
 };
 
 export type Opportunity = {
@@ -51,12 +73,20 @@ export type PlayerApplication = {
 };
 
 export type PlayerProfilePayload = {
-  displayName: string;
-  primaryPosition: string;
-  modality: string;
-  availabilityStatus: string;
-  locationLabel: string;
-  searchRadiusKm: number;
+  displayName?: string;
+  gender?: string;
+  primaryPosition?: string;
+  secondaryPositions?: string[];
+  dominantFoot?: string;
+  category?: string;
+  modality?: string;
+  availabilityStatus?: string;
+  locationLabel?: string;
+  locationLat?: number;
+  locationLng?: number;
+  searchRadiusKm?: number;
+  bio?: string;
+  visibilityLevel?: string;
 };
 
 type RequestOptions = RequestInit & {
@@ -103,15 +133,24 @@ export function registerPlayer(payload: RegisterPayload) {
   });
 }
 
+export async function getCurrentSession(token: string): Promise<Session> {
+  const user = await apiRequest<SessionUser>("/auth/me", { token });
+  return { accessToken: token, user };
+}
+
 export function listOpportunities() {
   return apiRequest<Opportunity[]>("/opportunities?limit=30");
+}
+
+export function getPlayerProfile(token: string) {
+  return apiRequest<PlayerProfile | null>("/players/me", { token });
 }
 
 export function savePlayerProfile(
   token: string,
   payload: PlayerProfilePayload
 ) {
-  return apiRequest("/players/me", {
+  return apiRequest<PlayerProfile>("/players/me", {
     method: "PUT",
     token,
     body: JSON.stringify(payload)

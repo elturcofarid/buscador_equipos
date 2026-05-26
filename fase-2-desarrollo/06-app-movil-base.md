@@ -15,6 +15,9 @@ Fecha: 2026-05-26
 - Vista `Mis postulaciones`.
 - Estados de postulacion en espanol.
 - Retirada de postulacion.
+- Persistencia de sesion con almacenamiento seguro en mobile.
+- Restauracion de sesion al abrir la app.
+- Edicion de perfil deportivo del jugador.
 - Export web para verificacion.
 - Servidor estatico local para evitar limite de watchers.
 
@@ -41,6 +44,12 @@ http://localhost:3004/api/v1
 - Postulacion desde la app: OK.
 - Vista `Mis postulaciones`: OK.
 - Retirada de postulacion: OK.
+- TypeScript tras persistencia/perfil: OK.
+- Export web tras persistencia/perfil: OK.
+- Registro con sesion guardada: OK.
+- Edicion de perfil deportivo: OK.
+- Restauracion de sesion tras recarga: OK.
+- Cierre de sesion y limpieza de sesion guardada: OK.
 
 ## Resultado observado
 
@@ -50,6 +59,9 @@ http://localhost:3004/api/v1
 - La postulacion devolvio confirmacion: `Postulacion enviada`.
 - La vista de postulaciones mostro el estado.
 - La retirada devolvio confirmacion: `Postulacion retirada`.
+- Tras guardar el perfil, la app mostro confirmacion: `Perfil guardado`.
+- Tras recargar, la app mostro: `Sesion restaurada`.
+- Tras cerrar sesion y recargar, la sesion volvio a `No`.
 
 ## Limitacion local
 
@@ -63,5 +75,5 @@ PORT=3007 npm run serve:web -w @bpf/mobile
 ## Siguiente paso recomendado
 
 - Preparar navegacion mobile real antes de sumar chat.
-- Agregar persistencia segura de sesion.
-- Agregar edicion de perfil jugador.
+- Mejorar navegacion mobile real.
+- Luego sumar chat asincrono entre jugador y club.

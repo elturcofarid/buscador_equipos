@@ -25,11 +25,18 @@ http://localhost:3007
 
 - Listar busquedas activas.
 - Login de jugador.
+- Restaurar sesion guardada al volver a abrir la app.
 - Crear/actualizar perfil base despues de login.
+- Editar perfil deportivo del jugador.
 - Seleccionar busqueda.
 - Enviar postulacion.
 - Ver mis postulaciones.
 - Retirar postulaciones.
+
+## Sesion
+
+La app guarda el token con `expo-secure-store` en iOS/Android. En web usa
+`localStorage` como fallback de desarrollo.
 
 ## Nota para dispositivos fisicos
 
