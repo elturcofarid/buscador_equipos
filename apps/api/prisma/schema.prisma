@@ -1,0 +1,252 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  DELETED
+}
+
+enum UserRole {
+  PLAYER
+  CLUB_MEMBER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum Modality {
+  FOOTBALL_11
+  FOOTBALL_7
+  FUTSAL
+}
+
+enum VisibilityLevel {
+  PUBLIC_LIMITED
+  VERIFIED_CLUBS_ONLY
+  HIDDEN_UNTIL_APPLICATION
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+  REVOKED
+}
+
+enum ClubRole {
+  OWNER
+  DIRECTOR
+  COACH
+  COORDINATOR
+  DELEGATE
+  STAFF
+}
+
+enum OpportunityType {
+  TRIAL
+  IMMEDIATE_JOIN
+  NEXT_SEASON
+}
+
+enum OpportunityStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  PAUSED
+  CLOSED
+  REJECTED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  VIEWED
+  SHORTLISTED
+  CONTACTED
+  TRIAL_SCHEDULED
+  REJECTED
+  WITHDRAWN
+  ACCEPTED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  fullName     String     @map("full_name")
+  dateOfBirth  DateTime   @map("date_of_birth")
+  primaryRole  UserRole   @default(PLAYER) @map("primary_role")
+  status       UserStatus @default(ACTIVE)
+
+  playerProfile  PlayerProfile?
+  clubMemberships ClubMember[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model PlayerProfile {
+  id                  String          @id @default(cuid())
+  userId              String          @unique @map("user_id")
+  displayName         String?         @map("display_name")
+  gender              Gender?
+  primaryPosition     String?         @map("primary_position")
+  secondaryPositions  String[]        @default([]) @map("secondary_positions")
+  dominantFoot        String?         @map("dominant_foot")
+  category            String?
+  modality            Modality?
+  availabilityStatus  String?         @map("availability_status")
+  locationLabel       String?         @map("location_label")
+  locationLat         Float?          @map("location_lat")
+  locationLng         Float?          @map("location_lng")
+  searchRadiusKm      Int?            @map("search_radius_km")
+  bio                 String?
+  visibilityLevel     VisibilityLevel @default(VERIFIED_CLUBS_ONLY) @map("visibility_level")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  applications Application[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("player_profiles")
+}
+
+model Club {
+  id                 String             @id @default(cuid())
+  name               String
+  normalizedName     String             @map("normalized_name")
+  federationRegion   String?            @map("federation_region")
+  city               String?
+  province           String?
+  country            String             @default("ES")
+  website            String?
+  contactEmail       String?            @map("contact_email")
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+
+  members ClubMember[]
+  teams   Team[]
+  opportunities Opportunity[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("clubs")
+}
+
+model ClubMember {
+  id                 String             @id @default(cuid())
+  clubId             String             @map("club_id")
+  userId             String             @map("user_id")
+  role               ClubRole           @default(STAFF)
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  verificationMethod String?            @map("verification_method")
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([clubId, userId])
+  @@map("club_members")
+}
+
+model Team {
+  id        String    @id @default(cuid())
+  clubId    String    @map("club_id")
+  name      String
+  category  String?
+  gender    Gender?
+  modality  Modality?
+  season    String?
+
+  club          Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("teams")
+}
+
+model Opportunity {
+  id                 String            @id @default(cuid())
+  clubId             String            @map("club_id")
+  teamId             String?           @map("team_id")
+  createdByUserId    String            @map("created_by_user_id")
+  title              String
+  description        String
+  category           String?
+  gender             Gender?
+  modality           Modality
+  primaryPosition    String            @map("primary_position")
+  secondaryPositions String[]          @default([]) @map("secondary_positions")
+  ageMin             Int?              @map("age_min")
+  ageMax             Int?              @map("age_max")
+  locationLabel      String?           @map("location_label")
+  locationLat        Float?            @map("location_lat")
+  locationLng        Float?            @map("location_lng")
+  level              String?
+  opportunityType    OpportunityType   @map("opportunity_type")
+  requirements       String?
+  deadlineAt         DateTime?         @map("deadline_at")
+  status             OpportunityStatus @default(DRAFT)
+
+  club         Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  applications Application[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([clubId])
+  @@map("opportunities")
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  opportunityId   String            @map("opportunity_id")
+  playerProfileId String            @map("player_profile_id")
+  message         String?
+  status          ApplicationStatus @default(SUBMITTED)
+
+  opportunity   Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([opportunityId, playerProfileId])
+  @@index([status])
+  @@map("applications")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}

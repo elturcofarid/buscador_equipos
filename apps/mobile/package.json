@@ -1,0 +1,9 @@
+{
+  "name": "@bpf/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"App movil Expo se implementara despues del backend base\"",
+    "build": "echo \"App movil pendiente\""
+  }
+}

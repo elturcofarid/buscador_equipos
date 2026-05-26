@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: bpf-postgres
+    environment:
+      POSTGRES_DB: buscador_futbol
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - bpf-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d buscador_futbol"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: bpf-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - bpf-redis-data:/data
+
+volumes:
+  bpf-postgres-data:
+  bpf-redis-data:

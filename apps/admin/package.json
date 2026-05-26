@@ -1,0 +1,9 @@
+{
+  "name": "@bpf/admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Admin web se implementara despues del backend base\"",
+    "build": "echo \"Admin web pendiente\""
+  }
+}

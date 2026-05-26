@@ -1,0 +1,19 @@
+{
+  "name": "buscador-pruebas-futbol",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev -w @bpf/api",
+    "build": "npm run build --workspaces --if-present",
+    "db:generate": "npm run prisma:generate -w @bpf/api",
+    "db:migrate": "npm run prisma:migrate -w @bpf/api",
+    "db:seed": "npm run db:seed -w @bpf/api"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
