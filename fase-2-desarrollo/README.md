@@ -84,7 +84,7 @@ docs/
 
 ## Siguiente paso
 
-Preparar la app movil base con login y listado de busquedas.
+Ampliar la app movil con registro de jugador, detalle de postulaciones y estados.
 
 ## Avance realizado
 

@@ -41,3 +41,4 @@ packages/
 
 - API: `http://localhost:3004/api/docs`
 - Panel admin: `http://localhost:3006`
+- App movil web: `http://localhost:3007`

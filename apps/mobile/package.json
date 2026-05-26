@@ -2,8 +2,22 @@
   "name": "@bpf/mobile",
   "version": "0.1.0",
   "private": true,
+  "main": "index.ts",
   "scripts": {
-    "dev": "echo \"App movil Expo se implementara despues del backend base\"",
-    "build": "echo \"App movil pendiente\""
+    "dev": "expo start",
+    "web": "expo start --web --port 3007",
+    "build": "expo export --platform web",
+    "serve:web": "node scripts/serve-web.js"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "^56.0.12",
+    "expo": "^56.0.4",
+    "expo-status-bar": "^56.0.4",
+    "react": "^19.2.6",
+    "react-native": "^0.85.3",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15"
   }
 }

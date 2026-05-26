@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Buscador Futbol",
+    "slug": "buscador-futbol",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "buscadorfutbol",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f5e42"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}
