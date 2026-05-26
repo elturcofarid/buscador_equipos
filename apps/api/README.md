@@ -67,3 +67,9 @@ El seed crea o actualiza un admin local:
 admin@buscador-futbol.local
 Admin12345!
 ```
+
+## Panel admin web
+
+```text
+http://localhost:3006
+```

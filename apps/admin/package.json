@@ -3,7 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "echo \"Admin web se implementara despues del backend base\"",
-    "build": "echo \"Admin web pendiente\""
+    "dev": "next dev -p 3005",
+    "build": "next build",
+    "start": "next start -p 3006"
+  },
+  "dependencies": {
+    "lucide-react": "^1.16.0",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3"
   }
 }

@@ -36,3 +36,8 @@ packages/
 - Perfil jugador minimo.
 - Clubes pendientes de verificacion.
 - Aprobacion manual de clubes desde admin API.
+
+## URLs locales actuales
+
+- API: `http://localhost:3004/api/docs`
+- Panel admin: `http://localhost:3006`

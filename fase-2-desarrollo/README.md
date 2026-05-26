@@ -80,10 +80,11 @@ docs/
 - Busquedas de jugadores listas.
 - Postulaciones listas.
 - API actualizada disponible en `http://localhost:3004/api/docs`.
+- Panel admin minimo disponible en `http://localhost:3006`.
 
 ## Siguiente paso
 
-Preparar el panel admin minimo para gestionar clubes y revisar actividad sin depender de Swagger.
+Preparar la app movil base con login y listado de busquedas.
 
 ## Avance realizado
 
