@@ -10,6 +10,8 @@ Fecha: 2026-05-26
 - Pantalla separada para detalle de busqueda y postulacion.
 - Portal club para crear clubes, preparar convocatorias y gestionar candidatos.
 - Login de jugador.
+- Registro diferenciado como jugador o club.
+- Restriccion de navegacion por tipo de cuenta.
 - Guardado automatico de perfil base tras login.
 - Seleccion de busqueda.
 - Detalle de busqueda.
@@ -63,6 +65,8 @@ http://localhost:3004/api/v1
 - TypeScript mobile tras portal club: OK.
 - Flujo API club pendiente con borrador de convocatoria: OK.
 - Flujo navegador de portal club: OK.
+- Bloqueo API para evitar cuenta mixta jugador/club: OK.
+- Navegacion mobile filtrada por rol jugador/club: OK.
 
 ## Resultado observado
 
@@ -80,6 +84,8 @@ http://localhost:3004/api/v1
 - El backend permite preparar borradores de convocatorias con club pendiente.
 - La publicacion y gestion de postulaciones siguen limitadas a clubes verificados.
 - Desde la app se creo un club pendiente y una convocatoria en estado `Borrador`.
+- Una cuenta jugador no puede crear clubes ni ver portal club.
+- Una cuenta club no puede guardar perfil de jugador ni ver postulaciones de jugador.
 
 ## Limitacion local
 

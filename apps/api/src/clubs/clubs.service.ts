@@ -3,7 +3,12 @@ import {
   ForbiddenException,
   Injectable
 } from "@nestjs/common";
-import { ClubRole, Prisma, VerificationStatus } from "@prisma/client";
+import {
+  ClubRole,
+  Prisma,
+  UserRole,
+  VerificationStatus
+} from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateClubDto } from "./dto/create-club.dto";
 import { JoinClubDto } from "./dto/join-club.dto";
@@ -13,6 +18,8 @@ export class ClubsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createClub(userId: string, dto: CreateClubDto) {
+    await this.assertClubAccount(userId);
+
     return this.prisma.club.create({
       data: {
         name: dto.name,
@@ -38,7 +45,9 @@ export class ClubsService {
     });
   }
 
-  getMyMemberships(userId: string) {
+  async getMyMemberships(userId: string) {
+    await this.assertClubAccount(userId);
+
     return this.prisma.clubMember.findMany({
       where: { userId },
       include: {
@@ -68,6 +77,8 @@ export class ClubsService {
   }
 
   async requestMembership(userId: string, clubId: string, dto: JoinClubDto) {
+    await this.assertClubAccount(userId);
+
     try {
       return await this.prisma.clubMember.create({
         data: {
@@ -105,6 +116,9 @@ export class ClubsService {
       where: {
         userId,
         clubId,
+        user: {
+          primaryRole: UserRole.CLUB_MEMBER
+        },
         verificationStatus: {
           notIn: [VerificationStatus.REJECTED, VerificationStatus.REVOKED]
         },
@@ -118,6 +132,19 @@ export class ClubsService {
 
     if (!membership) {
       throw new ForbiddenException("No tienes acceso a este club");
+    }
+  }
+
+  private async assertClubAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { primaryRole: true }
+    });
+
+    if (user?.primaryRole !== UserRole.CLUB_MEMBER) {
+      throw new ForbiddenException(
+        "Esta accion solo esta disponible para cuentas de club"
+      );
     }
   }
 }

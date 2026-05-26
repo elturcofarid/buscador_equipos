@@ -9,6 +9,7 @@ import {
   ApplicationStatus,
   OpportunityStatus,
   Prisma,
+  UserRole,
   VerificationStatus
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -20,6 +21,8 @@ export class ApplicationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async apply(userId: string, opportunityId: string, dto: CreateApplicationDto) {
+    await this.assertPlayerAccount(userId);
+
     const playerProfile = await this.prisma.playerProfile.findUnique({
       where: { userId }
     });
@@ -67,6 +70,8 @@ export class ApplicationsService {
   }
 
   async getMine(userId: string) {
+    await this.assertPlayerAccount(userId);
+
     const playerProfile = await this.prisma.playerProfile.findUnique({
       where: { userId }
     });
@@ -147,6 +152,8 @@ export class ApplicationsService {
   }
 
   async withdraw(userId: string, applicationId: string) {
+    await this.assertPlayerAccount(userId);
+
     const playerProfile = await this.prisma.playerProfile.findUnique({
       where: { userId }
     });
@@ -197,6 +204,9 @@ export class ApplicationsService {
       where: {
         userId,
         clubId,
+        user: {
+          primaryRole: UserRole.CLUB_MEMBER
+        },
         verificationStatus: VerificationStatus.VERIFIED,
         club: {
           verificationStatus: VerificationStatus.VERIFIED
@@ -207,6 +217,19 @@ export class ApplicationsService {
     if (!membership) {
       throw new ForbiddenException(
         "Solo responsables verificados del club pueden gestionar postulaciones"
+      );
+    }
+  }
+
+  private async assertPlayerAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { primaryRole: true }
+    });
+
+    if (user?.primaryRole !== UserRole.PLAYER) {
+      throw new ForbiddenException(
+        "Esta accion solo esta disponible para cuentas de jugador"
       );
     }
   }

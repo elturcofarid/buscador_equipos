@@ -27,6 +27,9 @@ ADMIN_PASSWORD="Admin12345!"
 
 ## Endpoints iniciales
 
+Las cuentas publicas se registran como `PLAYER` o `CLUB_MEMBER`. Una cuenta no
+puede operar en ambos modos.
+
 - `GET /api/v1/health`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`

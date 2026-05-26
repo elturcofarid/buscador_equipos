@@ -55,6 +55,7 @@ type ViewMode =
   | "club"
   | "account";
 type AuthMode = "login" | "register";
+type RegistrationRole = "PLAYER" | "CLUB_MEMBER";
 type ClubForm = {
   name: string;
   city: string;
@@ -128,6 +129,8 @@ const defaultOpportunityForm: OpportunityForm = {
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("search");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [registrationRole, setRegistrationRole] =
+    useState<RegistrationRole>("PLAYER");
   const [fullName, setFullName] = useState("Jugador Candidato");
   const [dateOfBirth, setDateOfBirth] = useState("1999-01-01");
   const [email, setEmail] = useState("");
@@ -172,6 +175,8 @@ export default function App() {
       ) ?? clubMemberships[0],
     [clubMemberships, selectedClubId]
   );
+  const isPlayerSession = session?.user.primaryRole === "PLAYER";
+  const isClubSession = session?.user.primaryRole === "CLUB_MEMBER";
 
   useEffect(() => {
     void refreshOpportunities();
@@ -199,8 +204,11 @@ export default function App() {
     }
   }
 
-  async function refreshApplications(authToken = session?.accessToken) {
-    if (!authToken) {
+  async function refreshApplications(
+    authToken = session?.accessToken,
+    role = session?.user.primaryRole
+  ) {
+    if (!authToken || role !== "PLAYER") {
       setApplications([]);
       return;
     }
@@ -222,8 +230,11 @@ export default function App() {
     }
   }
 
-  async function refreshClubMemberships(authToken = session?.accessToken) {
-    if (!authToken) {
+  async function refreshClubMemberships(
+    authToken = session?.accessToken,
+    role = session?.user.primaryRole
+  ) {
+    if (!authToken || role !== "CLUB_MEMBER") {
       setClubMemberships([]);
       setClubOpportunities([]);
       setClubApplications([]);
@@ -336,9 +347,22 @@ export default function App() {
     setEmail(nextSession.user.email);
     setFullName(nextSession.user.fullName || fullName);
     await storeSession(nextSession);
-    await ensurePlayerProfile(nextSession);
-    await refreshApplications(nextSession.accessToken);
-    await refreshClubMemberships(nextSession.accessToken);
+    if (nextSession.user.primaryRole === "PLAYER") {
+      await ensurePlayerProfile(nextSession);
+      await refreshApplications(nextSession.accessToken, nextSession.user.primaryRole);
+      setClubMemberships([]);
+      setClubOpportunities([]);
+      setClubApplications([]);
+      setSelectedClubId(null);
+      setViewMode("search");
+    } else if (nextSession.user.primaryRole === "CLUB_MEMBER") {
+      setApplications([]);
+      await refreshClubMemberships(
+        nextSession.accessToken,
+        nextSession.user.primaryRole
+      );
+      setViewMode("club");
+    }
     setNotice(successMessage);
   }
 
@@ -398,7 +422,6 @@ export default function App() {
     try {
       const nextSession = await login(email.trim(), password);
       await activateSession(nextSession, "Sesion iniciada");
-      setViewMode("search");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo entrar");
     } finally {
@@ -415,10 +438,10 @@ export default function App() {
         email: email.trim(),
         fullName: fullName.trim(),
         dateOfBirth,
-        password
+        password,
+        role: registrationRole
       });
       await activateSession(nextSession, "Cuenta creada y sesion guardada");
-      setViewMode("search");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo registrar");
     } finally {
@@ -427,6 +450,12 @@ export default function App() {
   }
 
   async function handleApply() {
+    if (session && session.user.primaryRole !== "PLAYER") {
+      setNotice("Las cuentas de club no pueden postular como jugador");
+      setViewMode("club");
+      return;
+    }
+
     if (!session || !selectedOpportunity) {
       setNotice("Inicia sesion para postular");
       setViewMode("account");
@@ -458,7 +487,7 @@ export default function App() {
   }
 
   async function handleWithdraw(applicationId: string) {
-    if (!session) {
+    if (!session || session.user.primaryRole !== "PLAYER") {
       return;
     }
 
@@ -479,7 +508,8 @@ export default function App() {
   }
 
   async function handleSaveProfile() {
-    if (!session) {
+    if (!session || session.user.primaryRole !== "PLAYER") {
+      setNotice("El perfil deportivo solo esta disponible para jugadores");
       return;
     }
 
@@ -509,6 +539,11 @@ export default function App() {
       return;
     }
 
+    if (session.user.primaryRole !== "CLUB_MEMBER") {
+      setNotice("Para crear un club debes registrarte como cuenta de club");
+      return;
+    }
+
     setClubLoading(true);
     setNotice("");
 
@@ -530,7 +565,11 @@ export default function App() {
   }
 
   async function handleCreateClubOpportunity() {
-    if (!session || !selectedClubMembership) {
+    if (
+      !session ||
+      session.user.primaryRole !== "CLUB_MEMBER" ||
+      !selectedClubMembership
+    ) {
       return;
     }
 
@@ -563,7 +602,11 @@ export default function App() {
     opportunityId: string,
     action: "publish" | "pause" | "close"
   ) {
-    if (!session || !selectedClubMembership) {
+    if (
+      !session ||
+      session.user.primaryRole !== "CLUB_MEMBER" ||
+      !selectedClubMembership
+    ) {
       return;
     }
 
@@ -598,7 +641,11 @@ export default function App() {
     applicationId: string,
     status: string
   ) {
-    if (!session || !selectedClubMembership) {
+    if (
+      !session ||
+      session.user.primaryRole !== "CLUB_MEMBER" ||
+      !selectedClubMembership
+    ) {
       return;
     }
 
@@ -655,8 +702,14 @@ export default function App() {
         </View>
 
         <View style={styles.statusRow}>
-          <Metric label="Busquedas" value={String(opportunities.length)} />
-          <Metric label="Postulaciones" value={String(applications.length)} />
+          <Metric
+            label={isClubSession ? "Clubes" : "Busquedas"}
+            value={String(isClubSession ? clubMemberships.length : opportunities.length)}
+          />
+          <Metric
+            label={isClubSession ? "Convocatorias" : "Postulaciones"}
+            value={String(isClubSession ? clubOpportunities.length : applications.length)}
+          />
           <Metric
             label="Sesion"
             value={sessionRestoring ? "Cargando" : session ? "Activa" : "No"}
@@ -742,12 +795,14 @@ export default function App() {
             password={password}
             profileForm={profileForm}
             profileSaving={profileSaving}
+            registrationRole={registrationRole}
             session={session}
             setAuthMode={setAuthMode}
             setDateOfBirth={setDateOfBirth}
             setEmail={setEmail}
             setFullName={setFullName}
             setPassword={setPassword}
+            setRegistrationRole={setRegistrationRole}
             updateProfileField={updateProfileField}
             onLogin={handleLogin}
             onLogout={logout}
@@ -762,6 +817,7 @@ export default function App() {
         applicationsCount={applications.length}
         clubCount={clubMemberships.length}
         sessionActive={Boolean(session)}
+        sessionRole={session?.user.primaryRole}
         viewMode={viewMode}
         onSelect={(nextViewMode) => {
           setViewMode(nextViewMode);
@@ -1485,12 +1541,14 @@ function AccountView({
   password,
   profileForm,
   profileSaving,
+  registrationRole,
   session,
   setAuthMode,
   setDateOfBirth,
   setEmail,
   setFullName,
   setPassword,
+  setRegistrationRole,
   updateProfileField,
   onLogin,
   onLogout,
@@ -1505,12 +1563,14 @@ function AccountView({
   password: string;
   profileForm: ProfileForm;
   profileSaving: boolean;
+  registrationRole: RegistrationRole;
   session: Session | null;
   setAuthMode: (value: AuthMode) => void;
   setDateOfBirth: (value: string) => void;
   setEmail: (value: string) => void;
   setFullName: (value: string) => void;
   setPassword: (value: string) => void;
+  setRegistrationRole: (value: RegistrationRole) => void;
   updateProfileField: (field: keyof ProfileForm, value: string) => void;
   onLogin: () => void;
   onLogout: () => void | Promise<void>;
@@ -1518,6 +1578,35 @@ function AccountView({
   onSaveProfile: () => void;
 }) {
   if (session) {
+    if (session.user.primaryRole !== "PLAYER") {
+      return (
+        <View style={styles.panel}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.panelTitle}>Cuenta club</Text>
+              <Text style={styles.sessionText}>{session.user.email}</Text>
+            </View>
+            <Pressable
+              onPress={() => void onLogout()}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Cerrar sesion</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.profileSummary}>
+            <Info label="Responsable" value={session.user.fullName} />
+            <Info label="Tipo de cuenta" value="Club" />
+          </View>
+
+          <Text style={styles.emptyText}>
+            Gestiona tus clubes, convocatorias y candidatos desde la seccion
+            Club.
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.panel}>
         <View style={styles.sectionHeader}>
@@ -1635,7 +1724,11 @@ function AccountView({
     <View style={styles.panel}>
       <View style={styles.sectionHeader}>
         <Text style={styles.panelTitle}>
-          {authMode === "login" ? "Acceso jugador" : "Registro jugador"}
+          {authMode === "login"
+            ? "Acceso"
+            : registrationRole === "PLAYER"
+              ? "Registro jugador"
+              : "Registro club"}
         </Text>
       </View>
       <View style={styles.segmentedCompact}>
@@ -1653,9 +1746,36 @@ function AccountView({
       <View style={styles.form}>
         {authMode === "register" ? (
           <>
+            <Text style={styles.fieldLabel}>Tipo de cuenta</Text>
+            <View style={styles.segmentedCompact}>
+              <SegmentButton
+                active={registrationRole === "PLAYER"}
+                label="Jugador"
+                onPress={() => {
+                  setRegistrationRole("PLAYER");
+                  if (fullName === "Responsable Club") {
+                    setFullName("Jugador Candidato");
+                  }
+                }}
+              />
+              <SegmentButton
+                active={registrationRole === "CLUB_MEMBER"}
+                label="Club"
+                onPress={() => {
+                  setRegistrationRole("CLUB_MEMBER");
+                  if (fullName === "Jugador Candidato") {
+                    setFullName("Responsable Club");
+                  }
+                }}
+              />
+            </View>
             <TextInput
               onChangeText={setFullName}
-              placeholder="Nombre completo"
+              placeholder={
+                registrationRole === "PLAYER"
+                  ? "Nombre completo"
+                  : "Nombre del responsable"
+              }
               style={styles.input}
               value={fullName}
             />
@@ -1708,35 +1828,48 @@ function BottomNavigation({
   applicationsCount,
   clubCount,
   sessionActive,
+  sessionRole,
   viewMode,
   onSelect
 }: {
   applicationsCount: number;
   clubCount: number;
   sessionActive: boolean;
+  sessionRole?: string;
   viewMode: ViewMode;
   onSelect: (nextViewMode: "search" | "applications" | "club" | "account") => void;
 }) {
+  const showPlayerNavigation = !sessionRole || sessionRole === "PLAYER";
+  const showClubNavigation = sessionRole === "CLUB_MEMBER";
+
   return (
     <View style={styles.bottomNavigation}>
-      <BottomNavigationButton
-        active={viewMode === "search" || viewMode === "opportunityDetail"}
-        label="Buscar"
-        meta="Clubes"
-        onPress={() => onSelect("search")}
-      />
-      <BottomNavigationButton
-        active={viewMode === "applications"}
-        label="Postul."
-        meta={String(applicationsCount)}
-        onPress={() => onSelect("applications")}
-      />
-      <BottomNavigationButton
-        active={viewMode === "club"}
-        label="Club"
-        meta={String(clubCount)}
-        onPress={() => onSelect("club")}
-      />
+      {showPlayerNavigation ? (
+        <>
+          <BottomNavigationButton
+            active={viewMode === "search" || viewMode === "opportunityDetail"}
+            label="Buscar"
+            meta="Clubes"
+            onPress={() => onSelect("search")}
+          />
+          {sessionRole === "PLAYER" ? (
+            <BottomNavigationButton
+              active={viewMode === "applications"}
+              label="Postul."
+              meta={String(applicationsCount)}
+              onPress={() => onSelect("applications")}
+            />
+          ) : null}
+        </>
+      ) : null}
+      {showClubNavigation ? (
+        <BottomNavigationButton
+          active={viewMode === "club"}
+          label="Club"
+          meta={String(clubCount)}
+          onPress={() => onSelect("club")}
+        />
+      ) : null}
       <BottomNavigationButton
         active={viewMode === "account"}
         label="Cuenta"

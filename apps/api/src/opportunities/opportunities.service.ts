@@ -6,6 +6,7 @@ import {
 import {
   OpportunityStatus,
   Prisma,
+  UserRole,
   VerificationStatus
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -169,6 +170,9 @@ export class OpportunitiesService {
       where: {
         userId,
         clubId,
+        user: {
+          primaryRole: UserRole.CLUB_MEMBER
+        },
         verificationStatus: VerificationStatus.VERIFIED,
         club: {
           verificationStatus: VerificationStatus.VERIFIED
@@ -188,6 +192,9 @@ export class OpportunitiesService {
       where: {
         userId,
         clubId,
+        user: {
+          primaryRole: UserRole.CLUB_MEMBER
+        },
         verificationStatus: {
           notIn: [VerificationStatus.REJECTED, VerificationStatus.REVOKED]
         },

@@ -6,6 +6,7 @@ export type RegisterPayload = {
   fullName: string;
   dateOfBirth: string;
   password: string;
+  role?: "PLAYER" | "CLUB_MEMBER";
 };
 
 export type PlayerProfile = {

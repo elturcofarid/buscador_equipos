@@ -31,6 +31,8 @@ http://localhost:3007
 - Publicar, pausar y cerrar convocatorias de clubes verificados.
 - Ver y actualizar postulaciones recibidas por un club verificado.
 - Login de jugador.
+- Registro diferenciado como jugador o club.
+- Navegacion filtrada por tipo de cuenta.
 - Restaurar sesion guardada al volver a abrir la app.
 - Crear/actualizar perfil base despues de login.
 - Editar perfil deportivo del jugador.
