@@ -28,6 +28,8 @@ http://localhost:3007
 - Crear/actualizar perfil base despues de login.
 - Seleccionar busqueda.
 - Enviar postulacion.
+- Ver mis postulaciones.
+- Retirar postulaciones.
 
 ## Nota para dispositivos fisicos
 

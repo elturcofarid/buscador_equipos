@@ -11,6 +11,10 @@ Fecha: 2026-05-26
 - Seleccion de busqueda.
 - Detalle de busqueda.
 - Envio de postulacion.
+- Registro de jugador desde la app.
+- Vista `Mis postulaciones`.
+- Estados de postulacion en espanol.
+- Retirada de postulacion.
 - Export web para verificacion.
 - Servidor estatico local para evitar limite de watchers.
 
@@ -32,8 +36,11 @@ http://localhost:3004/api/v1
 - Export web de Expo: OK.
 - Carga de busquedas activas: OK.
 - Login con jugador de prueba: OK.
+- Registro con jugador de prueba: OK.
 - Perfil base creado/actualizado tras login: OK.
 - Postulacion desde la app: OK.
+- Vista `Mis postulaciones`: OK.
+- Retirada de postulacion: OK.
 
 ## Resultado observado
 
@@ -41,6 +48,8 @@ http://localhost:3004/api/v1
 - La sesion paso de `No` a `Activa`.
 - El boton de postulacion quedo disponible despues del login.
 - La postulacion devolvio confirmacion: `Postulacion enviada`.
+- La vista de postulaciones mostro el estado.
+- La retirada devolvio confirmacion: `Postulacion retirada`.
 
 ## Limitacion local
 
@@ -53,7 +62,6 @@ PORT=3007 npm run serve:web -w @bpf/mobile
 
 ## Siguiente paso recomendado
 
-- Agregar registro de jugador desde la app.
-- Agregar pantalla `Mis postulaciones`.
-- Mostrar estado de cada postulacion.
 - Preparar navegacion mobile real antes de sumar chat.
+- Agregar persistencia segura de sesion.
+- Agregar edicion de perfil jugador.

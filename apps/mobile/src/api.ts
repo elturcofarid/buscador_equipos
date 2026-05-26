@@ -13,6 +13,13 @@ export type Session = {
   user: SessionUser;
 };
 
+export type RegisterPayload = {
+  email: string;
+  fullName: string;
+  dateOfBirth: string;
+  password: string;
+};
+
 export type Opportunity = {
   id: string;
   title: string;
@@ -33,6 +40,14 @@ export type Opportunity = {
     city: string | null;
     verificationStatus: string;
   };
+};
+
+export type PlayerApplication = {
+  id: string;
+  message: string | null;
+  status: string;
+  createdAt: string;
+  opportunity: Opportunity;
 };
 
 export type PlayerProfilePayload = {
@@ -81,6 +96,13 @@ export function login(email: string, password: string) {
   });
 }
 
+export function registerPlayer(payload: RegisterPayload) {
+  return apiRequest<Session>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function listOpportunities() {
   return apiRequest<Opportunity[]>("/opportunities?limit=30");
 }
@@ -105,5 +127,18 @@ export function applyToOpportunity(
     method: "POST",
     token,
     body: JSON.stringify({ message })
+  });
+}
+
+export function listMyApplications(token: string) {
+  return apiRequest<PlayerApplication[]>("/players/me/applications", {
+    token
+  });
+}
+
+export function withdrawApplication(token: string, applicationId: string) {
+  return apiRequest<PlayerApplication>(`/applications/${applicationId}/withdraw`, {
+    method: "POST",
+    token
   });
 }
