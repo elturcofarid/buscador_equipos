@@ -26,6 +26,14 @@ export class ClubsController {
     return this.clubsService.getMyMemberships(user.id);
   }
 
+  @Get(":clubId/opportunities")
+  getOpportunities(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("clubId") clubId: string
+  ) {
+    return this.clubsService.getClubOpportunities(user.id, clubId);
+  }
+
   @Post(":clubId/join-request")
   joinRequest(
     @CurrentUser() user: AuthenticatedUser,

@@ -82,7 +82,7 @@ export class OpportunitiesService {
   }
 
   async create(userId: string, dto: CreateOpportunityDto) {
-    await this.assertCanManageClub(userId, dto.clubId);
+    await this.assertCanCreateDraftForClub(userId, dto.clubId);
 
     return this.prisma.opportunity.create({
       data: {
@@ -179,6 +179,29 @@ export class OpportunitiesService {
     if (!membership) {
       throw new ForbiddenException(
         "Solo responsables verificados de clubes verificados pueden publicar busquedas"
+      );
+    }
+  }
+
+  private async assertCanCreateDraftForClub(userId: string, clubId: string) {
+    const membership = await this.prisma.clubMember.findFirst({
+      where: {
+        userId,
+        clubId,
+        verificationStatus: {
+          notIn: [VerificationStatus.REJECTED, VerificationStatus.REVOKED]
+        },
+        club: {
+          verificationStatus: {
+            notIn: [VerificationStatus.REJECTED, VerificationStatus.REVOKED]
+          }
+        }
+      }
+    });
+
+    if (!membership) {
+      throw new ForbiddenException(
+        "Solo responsables del club pueden crear borradores de busquedas"
       );
     }
   }

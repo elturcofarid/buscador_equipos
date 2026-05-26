@@ -35,6 +35,7 @@ ADMIN_PASSWORD="Admin12345!"
 - `PUT /api/v1/players/me`
 - `POST /api/v1/clubs`
 - `GET /api/v1/clubs/mine`
+- `GET /api/v1/clubs/:clubId/opportunities`
 - `POST /api/v1/clubs/:clubId/join-request`
 - `GET /api/v1/opportunities`
 - `GET /api/v1/opportunities/:opportunityId`

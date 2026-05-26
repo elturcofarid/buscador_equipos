@@ -6,8 +6,9 @@ Fecha: 2026-05-26
 
 - Proyecto Expo real en `apps/mobile`.
 - Listado de busquedas activas contra la API.
-- Navegacion con barra inferior entre busquedas, postulaciones y cuenta.
+- Navegacion con barra inferior entre busquedas, postulaciones, club y cuenta.
 - Pantalla separada para detalle de busqueda y postulacion.
+- Portal club para crear clubes, preparar convocatorias y gestionar candidatos.
 - Login de jugador.
 - Guardado automatico de perfil base tras login.
 - Seleccion de busqueda.
@@ -20,6 +21,11 @@ Fecha: 2026-05-26
 - Persistencia de sesion con almacenamiento seguro en mobile.
 - Restauracion de sesion al abrir la app.
 - Edicion de perfil deportivo del jugador.
+- Creacion de clubes desde app movil.
+- Listado de clubes propios y estado de verificacion.
+- Creacion de borradores de convocatorias.
+- Publicacion, pausa y cierre de convocatorias para clubes verificados.
+- Gestion de estados de postulaciones recibidas.
 - Export web para verificacion.
 - Servidor estatico local para evitar limite de watchers.
 
@@ -53,6 +59,10 @@ http://localhost:3004/api/v1
 - Restauracion de sesion tras recarga: OK.
 - Cierre de sesion y limpieza de sesion guardada: OK.
 - Navegacion mobile entre busquedas, detalle, postulaciones y cuenta: OK.
+- Build API tras portal club: OK.
+- TypeScript mobile tras portal club: OK.
+- Flujo API club pendiente con borrador de convocatoria: OK.
+- Flujo navegador de portal club: OK.
 
 ## Resultado observado
 
@@ -66,7 +76,10 @@ http://localhost:3004/api/v1
 - Tras recargar, la app mostro: `Sesion restaurada`.
 - Tras cerrar sesion y recargar, la sesion volvio a `No`.
 - La lista de busquedas abrio una pantalla de detalle separada.
-- La barra inferior permitio cambiar entre `Buscar`, `Postulaciones` y `Cuenta`.
+- La barra inferior permitio cambiar entre `Buscar`, `Postulaciones`, `Club` y `Cuenta`.
+- El backend permite preparar borradores de convocatorias con club pendiente.
+- La publicacion y gestion de postulaciones siguen limitadas a clubes verificados.
+- Desde la app se creo un club pendiente y una convocatoria en estado `Borrador`.
 
 ## Limitacion local
 

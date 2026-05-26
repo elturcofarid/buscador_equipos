@@ -24,8 +24,12 @@ http://localhost:3007
 ## Funciones actuales
 
 - Listar busquedas activas.
-- Navegacion con barra inferior entre busquedas, postulaciones y cuenta.
+- Navegacion con barra inferior entre busquedas, postulaciones, club y cuenta.
 - Pantalla separada para detalle de busqueda.
+- Portal club para crear clubes y ver estado de verificacion.
+- Crear borradores de convocatorias desde la app.
+- Publicar, pausar y cerrar convocatorias de clubes verificados.
+- Ver y actualizar postulaciones recibidas por un club verificado.
 - Login de jugador.
 - Restaurar sesion guardada al volver a abrir la app.
 - Crear/actualizar perfil base despues de login.

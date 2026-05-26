@@ -44,17 +44,25 @@ export type Session = {
 
 export type Opportunity = {
   id: string;
+  clubId?: string;
+  teamId?: string | null;
+  createdByUserId?: string;
   title: string;
   description: string;
   category: string | null;
   gender: string | null;
   modality: string;
   primaryPosition: string;
+  secondaryPositions?: string[];
   ageMin: number | null;
   ageMax: number | null;
   locationLabel: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
   level: string | null;
   opportunityType: string;
+  requirements?: string | null;
+  deadlineAt?: string | null;
   status: string;
   club: {
     id: string;
@@ -64,12 +72,55 @@ export type Opportunity = {
   };
 };
 
+export type Club = {
+  id: string;
+  name: string;
+  normalizedName?: string;
+  federationRegion: string | null;
+  city: string | null;
+  province: string | null;
+  country: string;
+  website: string | null;
+  contactEmail: string | null;
+  verificationStatus: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClubMembership = {
+  id: string;
+  clubId: string;
+  userId: string;
+  role: string;
+  verificationStatus: string;
+  verificationMethod: string | null;
+  club: Club;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PlayerApplication = {
   id: string;
   message: string | null;
   status: string;
   createdAt: string;
   opportunity: Opportunity;
+};
+
+export type ClubApplication = {
+  id: string;
+  message: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  opportunity: Opportunity;
+  playerProfile: PlayerProfile & {
+    user: {
+      id: string;
+      email: string;
+      fullName: string;
+    };
+  };
 };
 
 export type PlayerProfilePayload = {
@@ -87,6 +138,33 @@ export type PlayerProfilePayload = {
   searchRadiusKm?: number;
   bio?: string;
   visibilityLevel?: string;
+};
+
+export type CreateClubPayload = {
+  name: string;
+  city?: string;
+  province?: string;
+  federationRegion?: string;
+  website?: string;
+  contactEmail?: string;
+};
+
+export type CreateOpportunityPayload = {
+  clubId: string;
+  title: string;
+  description: string;
+  category?: string;
+  gender?: string;
+  modality: string;
+  primaryPosition: string;
+  secondaryPositions?: string[];
+  ageMin?: number;
+  ageMax?: number;
+  locationLabel?: string;
+  level?: string;
+  opportunityType: string;
+  requirements?: string;
+  deadlineAt?: string;
 };
 
 type RequestOptions = RequestInit & {
@@ -140,6 +218,74 @@ export async function getCurrentSession(token: string): Promise<Session> {
 
 export function listOpportunities() {
   return apiRequest<Opportunity[]>("/opportunities?limit=30");
+}
+
+export function listMyClubMemberships(token: string) {
+  return apiRequest<ClubMembership[]>("/clubs/mine", { token });
+}
+
+export function createClub(token: string, payload: CreateClubPayload) {
+  return apiRequest<Club>("/clubs", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listClubOpportunities(token: string, clubId: string) {
+  return apiRequest<Opportunity[]>(`/clubs/${clubId}/opportunities`, {
+    token
+  });
+}
+
+export function createOpportunity(
+  token: string,
+  payload: CreateOpportunityPayload
+) {
+  return apiRequest<Opportunity>("/opportunities", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function publishOpportunity(token: string, opportunityId: string) {
+  return apiRequest<Opportunity>(`/opportunities/${opportunityId}/publish`, {
+    method: "POST",
+    token
+  });
+}
+
+export function pauseOpportunity(token: string, opportunityId: string) {
+  return apiRequest<Opportunity>(`/opportunities/${opportunityId}/pause`, {
+    method: "POST",
+    token
+  });
+}
+
+export function closeOpportunity(token: string, opportunityId: string) {
+  return apiRequest<Opportunity>(`/opportunities/${opportunityId}/close`, {
+    method: "POST",
+    token
+  });
+}
+
+export function listClubApplications(token: string, clubId: string) {
+  return apiRequest<ClubApplication[]>(`/clubs/${clubId}/applications`, {
+    token
+  });
+}
+
+export function updateApplicationStatus(
+  token: string,
+  applicationId: string,
+  status: string
+) {
+  return apiRequest<ClubApplication>(`/applications/${applicationId}/status`, {
+    method: "PUT",
+    token,
+    body: JSON.stringify({ status })
+  });
 }
 
 export function getPlayerProfile(token: string) {

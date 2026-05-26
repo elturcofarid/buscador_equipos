@@ -14,19 +14,32 @@ import {
 } from "react-native";
 import {
   API_BASE_URL,
+  ClubApplication,
+  ClubMembership,
+  CreateClubPayload,
+  CreateOpportunityPayload,
   Opportunity,
   PlayerApplication,
   PlayerProfile,
   PlayerProfilePayload,
   Session,
   applyToOpportunity,
+  closeOpportunity,
+  createClub,
+  createOpportunity,
   getCurrentSession,
   getPlayerProfile,
+  listClubApplications,
+  listClubOpportunities,
+  listMyClubMemberships,
   listMyApplications,
   listOpportunities,
   login,
+  pauseOpportunity,
+  publishOpportunity,
   registerPlayer,
   savePlayerProfile,
+  updateApplicationStatus,
   withdrawApplication
 } from "./api";
 import {
@@ -35,8 +48,35 @@ import {
   storeSession
 } from "./sessionStorage";
 
-type ViewMode = "search" | "opportunityDetail" | "applications" | "account";
+type ViewMode =
+  | "search"
+  | "opportunityDetail"
+  | "applications"
+  | "club"
+  | "account";
 type AuthMode = "login" | "register";
+type ClubForm = {
+  name: string;
+  city: string;
+  province: string;
+  federationRegion: string;
+  contactEmail: string;
+  website: string;
+};
+type OpportunityForm = {
+  title: string;
+  description: string;
+  category: string;
+  gender: string;
+  modality: string;
+  primaryPosition: string;
+  ageMin: string;
+  ageMax: string;
+  locationLabel: string;
+  level: string;
+  opportunityType: string;
+  requirements: string;
+};
 type ProfileForm = {
   displayName: string;
   primaryPosition: string;
@@ -61,6 +101,30 @@ const defaultProfileForm: ProfileForm = {
   bio: ""
 };
 
+const defaultClubForm: ClubForm = {
+  name: "",
+  city: "Madrid",
+  province: "Madrid",
+  federationRegion: "Real Federacion de Futbol de Madrid",
+  contactEmail: "",
+  website: ""
+};
+
+const defaultOpportunityForm: OpportunityForm = {
+  title: "Buscamos jugador para prueba",
+  description: "Convocatoria abierta para realizar una prueba con el equipo.",
+  category: "Senior",
+  gender: "MALE",
+  modality: "FOOTBALL_11",
+  primaryPosition: "Portero",
+  ageMin: "18",
+  ageMax: "35",
+  locationLabel: "Madrid",
+  level: "Amateur",
+  opportunityType: "TRIAL",
+  requirements: ""
+};
+
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("search");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -71,15 +135,25 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [profileForm, setProfileForm] =
     useState<ProfileForm>(defaultProfileForm);
+  const [clubForm, setClubForm] = useState<ClubForm>(defaultClubForm);
+  const [opportunityForm, setOpportunityForm] =
+    useState<OpportunityForm>(defaultOpportunityForm);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [applications, setApplications] = useState<PlayerApplication[]>([]);
+  const [clubMemberships, setClubMemberships] = useState<ClubMembership[]>([]);
+  const [clubOpportunities, setClubOpportunities] = useState<Opportunity[]>([]);
+  const [clubApplications, setClubApplications] = useState<ClubApplication[]>(
+    []
+  );
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<
     string | null
   >(null);
+  const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
   const [message, setMessage] = useState(
     "Estoy disponible para una prueba esta semana."
   );
   const [loading, setLoading] = useState(false);
+  const [clubLoading, setClubLoading] = useState(false);
   const [sessionRestoring, setSessionRestoring] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -91,6 +165,13 @@ export default function App() {
     [opportunities, selectedOpportunityId]
   );
   const screenTitle = getScreenTitle(viewMode);
+  const selectedClubMembership = useMemo(
+    () =>
+      clubMemberships.find(
+        (membership) => membership.club.id === selectedClubId
+      ) ?? clubMemberships[0],
+    [clubMemberships, selectedClubId]
+  );
 
   useEffect(() => {
     void refreshOpportunities();
@@ -141,6 +222,93 @@ export default function App() {
     }
   }
 
+  async function refreshClubMemberships(authToken = session?.accessToken) {
+    if (!authToken) {
+      setClubMemberships([]);
+      setClubOpportunities([]);
+      setClubApplications([]);
+      setSelectedClubId(null);
+      return;
+    }
+
+    if (!clubForm.name.trim()) {
+      setNotice("Indica el nombre del club");
+      return;
+    }
+
+    setClubLoading(true);
+
+    try {
+      const memberships = await listMyClubMemberships(authToken);
+      setClubMemberships(memberships);
+
+      const nextMembership =
+        memberships.find((membership) => membership.club.id === selectedClubId) ??
+        memberships[0];
+      const nextClubId = nextMembership?.club.id ?? null;
+      setSelectedClubId(nextClubId);
+
+      if (nextMembership) {
+        await refreshClubWorkspace(authToken, nextMembership);
+      } else {
+        setClubOpportunities([]);
+        setClubApplications([]);
+      }
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar clubes"
+      );
+    } finally {
+      setClubLoading(false);
+    }
+  }
+
+  async function refreshClubWorkspace(
+    authToken = session?.accessToken,
+    membership = selectedClubMembership
+  ) {
+    if (!authToken || !membership) {
+      setClubOpportunities([]);
+      setClubApplications([]);
+      return;
+    }
+
+    if (!opportunityForm.title.trim() || !opportunityForm.primaryPosition.trim()) {
+      setNotice("Completa titulo y posicion de la convocatoria");
+      return;
+    }
+
+    setClubLoading(true);
+
+    try {
+      const ownOpportunities = await listClubOpportunities(
+        authToken,
+        membership.club.id
+      );
+      setClubOpportunities(ownOpportunities);
+
+      if (isVerifiedClubMembership(membership)) {
+        const receivedApplications = await listClubApplications(
+          authToken,
+          membership.club.id
+        );
+        setClubApplications(receivedApplications);
+      } else {
+        setClubApplications([]);
+      }
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo cargar el portal club"
+      );
+    } finally {
+      setClubLoading(false);
+    }
+  }
+
   async function restorePreviousSession() {
     setSessionRestoring(true);
 
@@ -170,6 +338,7 @@ export default function App() {
     await storeSession(nextSession);
     await ensurePlayerProfile(nextSession);
     await refreshApplications(nextSession.accessToken);
+    await refreshClubMemberships(nextSession.accessToken);
     setNotice(successMessage);
   }
 
@@ -333,10 +502,132 @@ export default function App() {
     }
   }
 
+  async function handleCreateClub() {
+    if (!session) {
+      setViewMode("account");
+      setNotice("Inicia sesion para crear un club");
+      return;
+    }
+
+    setClubLoading(true);
+    setNotice("");
+
+    try {
+      const createdClub = await createClub(
+        session.accessToken,
+        buildCreateClubPayload(clubForm)
+      );
+      setClubForm(defaultClubForm);
+      await refreshClubMemberships(session.accessToken);
+      setSelectedClubId(createdClub.id);
+      setViewMode("club");
+      setNotice("Club creado. Queda pendiente de verificacion admin.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo crear club");
+    } finally {
+      setClubLoading(false);
+    }
+  }
+
+  async function handleCreateClubOpportunity() {
+    if (!session || !selectedClubMembership) {
+      return;
+    }
+
+    setClubLoading(true);
+    setNotice("");
+
+    try {
+      await createOpportunity(
+        session.accessToken,
+        buildCreateOpportunityPayload(
+          opportunityForm,
+          selectedClubMembership.club.id
+        )
+      );
+      setOpportunityForm(defaultOpportunityForm);
+      await refreshClubWorkspace(session.accessToken, selectedClubMembership);
+      setNotice("Convocatoria creada como borrador");
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo crear la convocatoria"
+      );
+    } finally {
+      setClubLoading(false);
+    }
+  }
+
+  async function handleOpportunityStatusAction(
+    opportunityId: string,
+    action: "publish" | "pause" | "close"
+  ) {
+    if (!session || !selectedClubMembership) {
+      return;
+    }
+
+    setClubLoading(true);
+    setNotice("");
+
+    try {
+      if (action === "publish") {
+        await publishOpportunity(session.accessToken, opportunityId);
+        setNotice("Convocatoria publicada");
+      } else if (action === "pause") {
+        await pauseOpportunity(session.accessToken, opportunityId);
+        setNotice("Convocatoria pausada");
+      } else {
+        await closeOpportunity(session.accessToken, opportunityId);
+        setNotice("Convocatoria cerrada");
+      }
+      await refreshClubWorkspace(session.accessToken, selectedClubMembership);
+      await refreshOpportunities();
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar la convocatoria"
+      );
+    } finally {
+      setClubLoading(false);
+    }
+  }
+
+  async function handleClubApplicationStatus(
+    applicationId: string,
+    status: string
+  ) {
+    if (!session || !selectedClubMembership) {
+      return;
+    }
+
+    setClubLoading(true);
+    setNotice("");
+
+    try {
+      await updateApplicationStatus(session.accessToken, applicationId, status);
+      await refreshClubWorkspace(session.accessToken, selectedClubMembership);
+      setNotice("Postulacion actualizada");
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar la postulacion"
+      );
+    } finally {
+      setClubLoading(false);
+    }
+  }
+
   async function logout() {
     await clearStoredSession();
     setSession(null);
     setApplications([]);
+    setClubMemberships([]);
+    setClubOpportunities([]);
+    setClubApplications([]);
+    setSelectedClubId(null);
     setPassword("");
     setNotice("");
     setViewMode("account");
@@ -356,6 +647,7 @@ export default function App() {
             onPress={() => {
               void refreshOpportunities();
               void refreshApplications();
+              void refreshClubMemberships();
             }}
           >
             <Text style={styles.iconText}>R</Text>
@@ -409,6 +701,37 @@ export default function App() {
           />
         ) : null}
 
+        {viewMode === "club" ? (
+          <ClubView
+            clubApplications={clubApplications}
+            clubForm={clubForm}
+            clubLoading={clubLoading}
+            clubMemberships={clubMemberships}
+            clubOpportunities={clubOpportunities}
+            opportunityForm={opportunityForm}
+            selectedClubId={selectedClubId}
+            selectedClubMembership={selectedClubMembership}
+            session={session}
+            setClubForm={setClubForm}
+            setOpportunityForm={setOpportunityForm}
+            onApplicationStatus={handleClubApplicationStatus}
+            onCreateClub={handleCreateClub}
+            onCreateOpportunity={handleCreateClubOpportunity}
+            onLoginPress={() => setViewMode("account")}
+            onOpportunityAction={handleOpportunityStatusAction}
+            onRefresh={() => void refreshClubMemberships()}
+            onSelectClub={(clubId) => {
+              const membership = clubMemberships.find(
+                (currentMembership) => currentMembership.club.id === clubId
+              );
+              setSelectedClubId(clubId);
+              if (membership && session) {
+                void refreshClubWorkspace(session.accessToken, membership);
+              }
+            }}
+          />
+        ) : null}
+
         {viewMode === "account" ? (
           <AccountView
             authMode={authMode}
@@ -437,6 +760,7 @@ export default function App() {
       </ScrollView>
       <BottomNavigation
         applicationsCount={applications.length}
+        clubCount={clubMemberships.length}
         sessionActive={Boolean(session)}
         viewMode={viewMode}
         onSelect={(nextViewMode) => {
@@ -688,6 +1012,470 @@ function ApplicationsView({
   );
 }
 
+function ClubView({
+  clubApplications,
+  clubForm,
+  clubLoading,
+  clubMemberships,
+  clubOpportunities,
+  opportunityForm,
+  selectedClubId,
+  selectedClubMembership,
+  session,
+  setClubForm,
+  setOpportunityForm,
+  onApplicationStatus,
+  onCreateClub,
+  onCreateOpportunity,
+  onLoginPress,
+  onOpportunityAction,
+  onRefresh,
+  onSelectClub
+}: {
+  clubApplications: ClubApplication[];
+  clubForm: ClubForm;
+  clubLoading: boolean;
+  clubMemberships: ClubMembership[];
+  clubOpportunities: Opportunity[];
+  opportunityForm: OpportunityForm;
+  selectedClubId: string | null;
+  selectedClubMembership?: ClubMembership;
+  session: Session | null;
+  setClubForm: (value: ClubForm | ((current: ClubForm) => ClubForm)) => void;
+  setOpportunityForm: (
+    value: OpportunityForm | ((current: OpportunityForm) => OpportunityForm)
+  ) => void;
+  onApplicationStatus: (applicationId: string, status: string) => void;
+  onCreateClub: () => void;
+  onCreateOpportunity: () => void;
+  onLoginPress: () => void;
+  onOpportunityAction: (
+    opportunityId: string,
+    action: "publish" | "pause" | "close"
+  ) => void;
+  onRefresh: () => void;
+  onSelectClub: (clubId: string) => void;
+}) {
+  function updateClubForm(field: keyof ClubForm, value: string) {
+    setClubForm((currentForm) => ({
+      ...currentForm,
+      [field]: value
+    }));
+  }
+
+  function updateOpportunityForm(field: keyof OpportunityForm, value: string) {
+    setOpportunityForm((currentForm) => ({
+      ...currentForm,
+      [field]: value
+    }));
+  }
+
+  if (!session) {
+    return (
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Portal club</Text>
+        <Text style={styles.emptyText}>
+          Inicia sesion para crear un club y gestionar convocatorias.
+        </Text>
+        <Pressable onPress={onLoginPress} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Ir a cuenta</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const verifiedClub = selectedClubMembership
+    ? isVerifiedClubMembership(selectedClubMembership)
+    : false;
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.sectionHeader}>
+        <View>
+          <Text style={styles.panelTitle}>Portal club</Text>
+          <Text style={styles.sectionHint}>
+            Crea clubes, prepara convocatorias y revisa candidatos.
+          </Text>
+        </View>
+        {clubLoading ? <ActivityIndicator color="#157f58" /> : null}
+      </View>
+
+      <View style={styles.panel}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.formTitle}>Mis clubes</Text>
+          <Pressable onPress={onRefresh} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Actualizar</Text>
+          </Pressable>
+        </View>
+        {clubMemberships.length === 0 ? (
+          <Text style={styles.emptyText}>Todavia no tienes clubes.</Text>
+        ) : (
+          <View style={styles.list}>
+            {clubMemberships.map((membership) => {
+              const active = membership.club.id === selectedClubId;
+              return (
+                <Pressable
+                  key={membership.id}
+                  onPress={() => onSelectClub(membership.club.id)}
+                  style={({ pressed }) => [
+                    styles.opportunityItem,
+                    active && styles.opportunityItemActive,
+                    pressed && styles.pressed
+                  ]}
+                >
+                  <View style={styles.itemHeader}>
+                    <Text style={styles.itemTitle}>{membership.club.name}</Text>
+                    <Text style={styles.statusBadge}>
+                      {formatVerificationStatus(
+                        membership.club.verificationStatus
+                      )}
+                    </Text>
+                  </View>
+                  <Text style={styles.itemMeta}>
+                    {membership.club.city ?? "Sin ciudad"} -{" "}
+                    {membership.role}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.formTitle}>Crear club</Text>
+        <View style={styles.form}>
+          <TextInput
+            onChangeText={(value) => updateClubForm("name", value)}
+            placeholder="Nombre del club"
+            style={styles.input}
+            value={clubForm.name}
+          />
+          <View style={styles.inlineFields}>
+            <TextInput
+              onChangeText={(value) => updateClubForm("city", value)}
+              placeholder="Ciudad"
+              style={[styles.input, styles.inlineInput]}
+              value={clubForm.city}
+            />
+            <TextInput
+              onChangeText={(value) => updateClubForm("province", value)}
+              placeholder="Provincia"
+              style={[styles.input, styles.inlineInput]}
+              value={clubForm.province}
+            />
+          </View>
+          <TextInput
+            onChangeText={(value) => updateClubForm("federationRegion", value)}
+            placeholder="Federacion territorial"
+            style={styles.input}
+            value={clubForm.federationRegion}
+          />
+          <TextInput
+            autoCapitalize="none"
+            inputMode="email"
+            onChangeText={(value) => updateClubForm("contactEmail", value)}
+            placeholder="Email de contacto"
+            style={styles.input}
+            value={clubForm.contactEmail}
+          />
+          <TextInput
+            autoCapitalize="none"
+            onChangeText={(value) => updateClubForm("website", value)}
+            placeholder="Web del club"
+            style={styles.input}
+            value={clubForm.website}
+          />
+          <Pressable
+            disabled={clubLoading}
+            onPress={onCreateClub}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.pressed,
+              clubLoading && styles.disabled
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Crear club</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {selectedClubMembership ? (
+        <>
+          <View style={styles.panel}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.formTitle}>
+                  {selectedClubMembership.club.name}
+                </Text>
+                <Text style={styles.sessionText}>
+                  {formatVerificationStatus(
+                    selectedClubMembership.club.verificationStatus
+                  )}
+                </Text>
+              </View>
+              <Text style={styles.statusBadge}>
+                {selectedClubMembership.role}
+              </Text>
+            </View>
+            {!verifiedClub ? (
+              <Text style={styles.emptyText}>
+                Puedes crear borradores. Para publicar y gestionar candidatos,
+                el admin debe aprobar el club.
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.formTitle}>Nueva convocatoria</Text>
+            <View style={styles.form}>
+              <TextInput
+                onChangeText={(value) => updateOpportunityForm("title", value)}
+                placeholder="Titulo"
+                style={styles.input}
+                value={opportunityForm.title}
+              />
+              <TextInput
+                multiline
+                onChangeText={(value) =>
+                  updateOpportunityForm("description", value)
+                }
+                placeholder="Descripcion"
+                style={[styles.input, styles.messageInput]}
+                value={opportunityForm.description}
+              />
+              <View style={styles.inlineFields}>
+                <TextInput
+                  onChangeText={(value) =>
+                    updateOpportunityForm("primaryPosition", value)
+                  }
+                  placeholder="Posicion"
+                  style={[styles.input, styles.inlineInput]}
+                  value={opportunityForm.primaryPosition}
+                />
+                <TextInput
+                  onChangeText={(value) =>
+                    updateOpportunityForm("category", value)
+                  }
+                  placeholder="Categoria"
+                  style={[styles.input, styles.inlineInput]}
+                  value={opportunityForm.category}
+                />
+              </View>
+              <Text style={styles.fieldLabel}>Modalidad</Text>
+              <View style={styles.segmentedCompact}>
+                <SegmentButton
+                  active={opportunityForm.modality === "FOOTBALL_11"}
+                  label="F11"
+                  onPress={() =>
+                    updateOpportunityForm("modality", "FOOTBALL_11")
+                  }
+                />
+                <SegmentButton
+                  active={opportunityForm.modality === "FOOTBALL_7"}
+                  label="F7"
+                  onPress={() =>
+                    updateOpportunityForm("modality", "FOOTBALL_7")
+                  }
+                />
+                <SegmentButton
+                  active={opportunityForm.modality === "FUTSAL"}
+                  label="Futsal"
+                  onPress={() => updateOpportunityForm("modality", "FUTSAL")}
+                />
+              </View>
+              <View style={styles.inlineFields}>
+                <TextInput
+                  inputMode="numeric"
+                  onChangeText={(value) => updateOpportunityForm("ageMin", value)}
+                  placeholder="Edad min."
+                  style={[styles.input, styles.inlineInput]}
+                  value={opportunityForm.ageMin}
+                />
+                <TextInput
+                  inputMode="numeric"
+                  onChangeText={(value) => updateOpportunityForm("ageMax", value)}
+                  placeholder="Edad max."
+                  style={[styles.input, styles.inlineInput]}
+                  value={opportunityForm.ageMax}
+                />
+              </View>
+              <TextInput
+                onChangeText={(value) =>
+                  updateOpportunityForm("locationLabel", value)
+                }
+                placeholder="Ubicacion"
+                style={styles.input}
+                value={opportunityForm.locationLabel}
+              />
+              <View style={styles.inlineFields}>
+                <TextInput
+                  onChangeText={(value) => updateOpportunityForm("level", value)}
+                  placeholder="Nivel"
+                  style={[styles.input, styles.inlineInput]}
+                  value={opportunityForm.level}
+                />
+                <TextInput
+                  onChangeText={(value) =>
+                    updateOpportunityForm("requirements", value)
+                  }
+                  placeholder="Requisitos"
+                  style={[styles.input, styles.inlineInput]}
+                  value={opportunityForm.requirements}
+                />
+              </View>
+              <Pressable
+                disabled={clubLoading}
+                onPress={onCreateOpportunity}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && styles.pressed,
+                  clubLoading && styles.disabled
+                ]}
+              >
+                <Text style={styles.primaryButtonText}>Crear borrador</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.formTitle}>Convocatorias</Text>
+            {clubOpportunities.length === 0 ? (
+              <Text style={styles.emptyText}>No hay convocatorias creadas.</Text>
+            ) : (
+              <View style={styles.list}>
+                {clubOpportunities.map((opportunity) => (
+                  <View key={opportunity.id} style={styles.applicationItem}>
+                    <View style={styles.itemHeader}>
+                      <Text style={styles.itemTitle}>{opportunity.title}</Text>
+                      <Text style={styles.statusBadge}>
+                        {formatOpportunityStatus(opportunity.status)}
+                      </Text>
+                    </View>
+                    <Text style={styles.itemMeta}>
+                      {opportunity.primaryPosition} -{" "}
+                      {opportunity.locationLabel ?? "Zona sin definir"}
+                    </Text>
+                    <View style={styles.actionRow}>
+                      {opportunity.status !== "ACTIVE" ? (
+                        <Pressable
+                          disabled={!verifiedClub}
+                          onPress={() =>
+                            onOpportunityAction(opportunity.id, "publish")
+                          }
+                          style={[
+                            styles.secondaryButton,
+                            !verifiedClub && styles.disabled
+                          ]}
+                        >
+                          <Text style={styles.secondaryButtonText}>Publicar</Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() =>
+                            onOpportunityAction(opportunity.id, "pause")
+                          }
+                          style={styles.secondaryButton}
+                        >
+                          <Text style={styles.secondaryButtonText}>Pausar</Text>
+                        </Pressable>
+                      )}
+                      {opportunity.status !== "CLOSED" ? (
+                        <Pressable
+                          onPress={() =>
+                            onOpportunityAction(opportunity.id, "close")
+                          }
+                          style={styles.secondaryButton}
+                        >
+                          <Text style={styles.secondaryButtonText}>Cerrar</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.formTitle}>Postulaciones recibidas</Text>
+            {!verifiedClub ? (
+              <Text style={styles.emptyText}>
+                Disponible cuando el club este verificado.
+              </Text>
+            ) : clubApplications.length === 0 ? (
+              <Text style={styles.emptyText}>No hay postulaciones recibidas.</Text>
+            ) : (
+              <View style={styles.list}>
+                {clubApplications.map((application) => (
+                  <View key={application.id} style={styles.applicationItem}>
+                    <View style={styles.itemHeader}>
+                      <Text style={styles.itemTitle}>
+                        {application.playerProfile.displayName ??
+                          application.playerProfile.user.fullName}
+                      </Text>
+                      <Text style={styles.statusBadge}>
+                        {formatApplicationStatus(application.status)}
+                      </Text>
+                    </View>
+                    <Text style={styles.itemClub}>
+                      {application.opportunity.title}
+                    </Text>
+                    <Text style={styles.itemMeta}>
+                      {application.playerProfile.primaryPosition ??
+                        "Posicion sin definir"}{" "}
+                      - {application.playerProfile.locationLabel ?? "Sin zona"}
+                    </Text>
+                    {application.message ? (
+                      <Text style={styles.description}>
+                        {application.message}
+                      </Text>
+                    ) : null}
+                    <View style={styles.actionRow}>
+                      <Pressable
+                        onPress={() =>
+                          onApplicationStatus(application.id, "VIEWED")
+                        }
+                        style={styles.secondaryButton}
+                      >
+                        <Text style={styles.secondaryButtonText}>Vista</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() =>
+                          onApplicationStatus(application.id, "SHORTLISTED")
+                        }
+                        style={styles.secondaryButton}
+                      >
+                        <Text style={styles.secondaryButtonText}>Preselecc.</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() =>
+                          onApplicationStatus(application.id, "CONTACTED")
+                        }
+                        style={styles.secondaryButton}
+                      >
+                        <Text style={styles.secondaryButtonText}>Contactado</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() =>
+                          onApplicationStatus(application.id, "REJECTED")
+                        }
+                        style={styles.secondaryButton}
+                      >
+                        <Text style={styles.secondaryButtonText}>Descartar</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 function AccountView({
   authMode,
   dateOfBirth,
@@ -918,14 +1706,16 @@ function AccountView({
 
 function BottomNavigation({
   applicationsCount,
+  clubCount,
   sessionActive,
   viewMode,
   onSelect
 }: {
   applicationsCount: number;
+  clubCount: number;
   sessionActive: boolean;
   viewMode: ViewMode;
-  onSelect: (nextViewMode: "search" | "applications" | "account") => void;
+  onSelect: (nextViewMode: "search" | "applications" | "club" | "account") => void;
 }) {
   return (
     <View style={styles.bottomNavigation}>
@@ -937,9 +1727,15 @@ function BottomNavigation({
       />
       <BottomNavigationButton
         active={viewMode === "applications"}
-        label="Postulaciones"
+        label="Postul."
         meta={String(applicationsCount)}
         onPress={() => onSelect("applications")}
+      />
+      <BottomNavigationButton
+        active={viewMode === "club"}
+        label="Club"
+        meta={String(clubCount)}
+        onPress={() => onSelect("club")}
       />
       <BottomNavigationButton
         active={viewMode === "account"}
@@ -1034,6 +1830,41 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
+function buildCreateClubPayload(clubForm: ClubForm): CreateClubPayload {
+  return {
+    name: clubForm.name.trim(),
+    city: cleanString(clubForm.city),
+    province: cleanString(clubForm.province),
+    federationRegion: cleanString(clubForm.federationRegion),
+    contactEmail: cleanString(clubForm.contactEmail),
+    website: cleanString(clubForm.website)
+  };
+}
+
+function buildCreateOpportunityPayload(
+  opportunityForm: OpportunityForm,
+  clubId: string
+): CreateOpportunityPayload {
+  const ageMin = Number.parseInt(opportunityForm.ageMin, 10);
+  const ageMax = Number.parseInt(opportunityForm.ageMax, 10);
+
+  return {
+    clubId,
+    title: opportunityForm.title.trim(),
+    description: opportunityForm.description.trim(),
+    category: cleanString(opportunityForm.category),
+    gender: cleanString(opportunityForm.gender),
+    modality: opportunityForm.modality,
+    primaryPosition: opportunityForm.primaryPosition.trim(),
+    ageMin: Number.isFinite(ageMin) ? ageMin : undefined,
+    ageMax: Number.isFinite(ageMax) ? ageMax : undefined,
+    locationLabel: cleanString(opportunityForm.locationLabel),
+    level: cleanString(opportunityForm.level),
+    opportunityType: opportunityForm.opportunityType,
+    requirements: cleanString(opportunityForm.requirements)
+  };
+}
+
 function buildProfilePayload(
   profileForm: ProfileForm,
   fallbackDisplayName: string
@@ -1074,6 +1905,7 @@ function getScreenTitle(viewMode: ViewMode) {
   const titles: Record<ViewMode, string> = {
     account: "Cuenta",
     applications: "Postulaciones",
+    club: "Club",
     opportunityDetail: "Detalle",
     search: "Buscador Futbol"
   };
@@ -1081,12 +1913,48 @@ function getScreenTitle(viewMode: ViewMode) {
   return titles[viewMode];
 }
 
+function isVerifiedClubMembership(membership: ClubMembership) {
+  return (
+    membership.club.verificationStatus === "VERIFIED" &&
+    membership.verificationStatus === "VERIFIED"
+  );
+}
+
+function formatVerificationStatus(status: string) {
+  const labels: Record<string, string> = {
+    PENDING: "Pendiente",
+    REJECTED: "Rechazado",
+    REVOKED: "Revocado",
+    UNVERIFIED: "Sin verificar",
+    VERIFIED: "Verificado"
+  };
+
+  return labels[status] ?? formatFromCode(status);
+}
+
+function formatOpportunityStatus(status: string) {
+  const labels: Record<string, string> = {
+    ACTIVE: "Activa",
+    CLOSED: "Cerrada",
+    DRAFT: "Borrador",
+    PAUSED: "Pausada",
+    PENDING_REVIEW: "En revision",
+    REJECTED: "Rechazada"
+  };
+
+  return labels[status] ?? formatFromCode(status);
+}
+
 function formatModality(modality: string) {
   return modality.replace("FOOTBALL_", "F").replace("_", " ");
 }
 
 function formatOpportunityType(type: string) {
-  return type
+  return formatFromCode(type);
+}
+
+function formatFromCode(value: string) {
+  return value
     .toLowerCase()
     .split("_")
     .map((word) => word[0].toUpperCase() + word.slice(1))
@@ -1265,6 +2133,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   inlineFields: {
+    alignItems: "stretch",
     flexDirection: "row",
     gap: 10
   },
@@ -1381,6 +2250,11 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: "space-between",
     marginTop: 2
+  },
+  actionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
   },
   linkText: {
     color: "#157f58",
