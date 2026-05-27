@@ -8,7 +8,7 @@ Fecha: 2026-05-26
 - Listado de busquedas activas contra la API.
 - Navegacion con barra inferior entre busquedas, postulaciones, club y cuenta.
 - Pantalla separada para detalle de busqueda y postulacion.
-- Portal club para crear clubes, preparar convocatorias y gestionar candidatos.
+- Portal club para ver clubes propios, preparar convocatorias y gestionar candidatos.
 - Login de jugador.
 - Registro diferenciado como jugador o club.
 - Restriccion de navegacion por tipo de cuenta.
@@ -26,7 +26,10 @@ Fecha: 2026-05-26
 - Creacion de clubes desde app movil.
 - Listado de clubes propios y estado de verificacion.
 - Creacion de borradores de convocatorias.
+- Edicion, eliminacion e inactivacion de convocatorias.
+- Configuracion de restricciones de edad y requisitos por convocatoria.
 - Publicacion, pausa y cierre de convocatorias para clubes verificados.
+- Bloqueo de postulaciones cuando el jugador no cumple el rango de edad.
 - Gestion de estados de postulaciones recibidas.
 - Export web para verificacion.
 - Servidor estatico local para evitar limite de watchers.
@@ -67,6 +70,8 @@ http://localhost:3004/api/v1
 - Flujo navegador de portal club: OK.
 - Bloqueo API para evitar cuenta mixta jugador/club: OK.
 - Navegacion mobile filtrada por rol jugador/club: OK.
+- Build API tras administracion de convocatorias: OK.
+- TypeScript mobile tras administracion de convocatorias: OK.
 
 ## Resultado observado
 
@@ -86,6 +91,9 @@ http://localhost:3004/api/v1
 - Desde la app se creo un club pendiente y una convocatoria en estado `Borrador`.
 - Una cuenta jugador no puede crear clubes ni ver portal club.
 - Una cuenta club no puede guardar perfil de jugador ni ver postulaciones de jugador.
+- Una cuenta club con club propio no ve el formulario de crear club en el portal.
+- El portal club permite editar, eliminar o inactivar convocatorias.
+- La API rechaza postulaciones fuera del rango de edad configurado.
 
 ## Limitacion local
 

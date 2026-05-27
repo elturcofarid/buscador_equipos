@@ -26,9 +26,10 @@ http://localhost:3007
 - Listar busquedas activas.
 - Navegacion con barra inferior entre busquedas, postulaciones, club y cuenta.
 - Pantalla separada para detalle de busqueda.
-- Portal club para crear clubes y ver estado de verificacion.
-- Crear borradores de convocatorias desde la app.
-- Publicar, pausar y cerrar convocatorias de clubes verificados.
+- Portal club para ver clubes propios y su estado de verificacion.
+- Crear y editar borradores de convocatorias desde la app.
+- Publicar, pausar, cerrar, eliminar o inactivar convocatorias.
+- Configurar restricciones de edad y requisitos de cada convocatoria.
 - Ver y actualizar postulaciones recibidas por un club verificado.
 - Login de jugador.
 - Registro diferenciado como jugador o club.

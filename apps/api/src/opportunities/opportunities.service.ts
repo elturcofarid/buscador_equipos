@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException
@@ -12,6 +13,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateOpportunityDto } from "./dto/create-opportunity.dto";
 import { SearchOpportunitiesDto } from "./dto/search-opportunities.dto";
+import { UpdateOpportunityDto } from "./dto/update-opportunity.dto";
 
 @Injectable()
 export class OpportunitiesService {
@@ -84,6 +86,7 @@ export class OpportunitiesService {
 
   async create(userId: string, dto: CreateOpportunityDto) {
     await this.assertCanCreateDraftForClub(userId, dto.clubId);
+    this.assertValidAgeRange(dto.ageMin, dto.ageMax);
 
     return this.prisma.opportunity.create({
       data: {
@@ -129,6 +132,52 @@ export class OpportunitiesService {
     });
   }
 
+  async update(userId: string, opportunityId: string, dto: UpdateOpportunityDto) {
+    const opportunity = await this.findOwnedOpportunity(userId, opportunityId);
+    await this.assertCanEditOpportunity(userId, opportunity);
+    this.assertValidAgeRange(
+      dto.ageMin === undefined ? opportunity.ageMin : dto.ageMin,
+      dto.ageMax === undefined ? opportunity.ageMax : dto.ageMax
+    );
+
+    return this.prisma.opportunity.update({
+      where: { id: opportunityId },
+      data: this.toOpportunityUpdateData(dto),
+      include: {
+        club: true,
+        team: true
+      }
+    });
+  }
+
+  async remove(userId: string, opportunityId: string) {
+    const opportunity = await this.findOwnedOpportunity(userId, opportunityId);
+    await this.assertCanEditOpportunity(userId, opportunity);
+
+    const applicationsCount = await this.prisma.application.count({
+      where: { opportunityId }
+    });
+
+    if (opportunity.status === OpportunityStatus.DRAFT && applicationsCount === 0) {
+      return this.prisma.opportunity.delete({
+        where: { id: opportunityId },
+        include: {
+          club: true,
+          team: true
+        }
+      });
+    }
+
+    return this.prisma.opportunity.update({
+      where: { id: opportunityId },
+      data: { status: OpportunityStatus.CLOSED },
+      include: {
+        club: true,
+        team: true
+      }
+    });
+  }
+
   async pause(userId: string, opportunityId: string) {
     const opportunity = await this.findOwnedOpportunity(userId, opportunityId);
     await this.assertCanManageClub(userId, opportunity.clubId);
@@ -163,6 +212,62 @@ export class OpportunitiesService {
     }
 
     return opportunity;
+  }
+
+  private async assertCanEditOpportunity(
+    userId: string,
+    opportunity: { clubId: string; status: OpportunityStatus }
+  ) {
+    if (opportunity.status === OpportunityStatus.CLOSED) {
+      throw new BadRequestException(
+        "No se puede modificar una convocatoria cerrada"
+      );
+    }
+
+    if (opportunity.status === OpportunityStatus.DRAFT) {
+      await this.assertCanCreateDraftForClub(userId, opportunity.clubId);
+      return;
+    }
+
+    await this.assertCanManageClub(userId, opportunity.clubId);
+  }
+
+  private toOpportunityUpdateData(dto: UpdateOpportunityDto) {
+    return {
+      title: dto.title,
+      description: dto.description,
+      category: dto.category,
+      gender: dto.gender,
+      modality: dto.modality,
+      primaryPosition: dto.primaryPosition,
+      secondaryPositions: dto.secondaryPositions,
+      ageMin: dto.ageMin,
+      ageMax: dto.ageMax,
+      locationLabel: dto.locationLabel,
+      locationLat: dto.locationLat,
+      locationLng: dto.locationLng,
+      level: dto.level,
+      opportunityType: dto.opportunityType,
+      requirements: dto.requirements,
+      deadlineAt: dto.deadlineAt ? new Date(dto.deadlineAt) : undefined
+    };
+  }
+
+  private assertValidAgeRange(
+    ageMin?: number | null,
+    ageMax?: number | null
+  ) {
+    if (
+      ageMin !== undefined &&
+      ageMin !== null &&
+      ageMax !== undefined &&
+      ageMax !== null &&
+      ageMin > ageMax
+    ) {
+      throw new BadRequestException(
+        "La edad minima no puede ser mayor que la edad maxima"
+      );
+    }
   }
 
   private async assertCanManageClub(userId: string, clubId: string) {

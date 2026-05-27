@@ -23,10 +23,12 @@ import {
   PlayerProfile,
   PlayerProfilePayload,
   Session,
+  UpdateOpportunityPayload,
   applyToOpportunity,
   closeOpportunity,
   createClub,
   createOpportunity,
+  deleteOpportunity,
   getCurrentSession,
   getPlayerProfile,
   listClubApplications,
@@ -39,6 +41,7 @@ import {
   publishOpportunity,
   registerPlayer,
   savePlayerProfile,
+  updateOpportunity,
   updateApplicationStatus,
   withdrawApplication
 } from "./api";
@@ -152,6 +155,9 @@ export default function App() {
     string | null
   >(null);
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
+  const [editingOpportunityId, setEditingOpportunityId] = useState<string | null>(
+    null
+  );
   const [message, setMessage] = useState(
     "Estoy disponible para una prueba esta semana."
   );
@@ -242,11 +248,6 @@ export default function App() {
       return;
     }
 
-    if (!clubForm.name.trim()) {
-      setNotice("Indica el nombre del club");
-      return;
-    }
-
     setClubLoading(true);
 
     try {
@@ -283,11 +284,6 @@ export default function App() {
     if (!authToken || !membership) {
       setClubOpportunities([]);
       setClubApplications([]);
-      return;
-    }
-
-    if (!opportunityForm.title.trim() || !opportunityForm.primaryPosition.trim()) {
-      setNotice("Completa titulo y posicion de la convocatoria");
       return;
     }
 
@@ -544,6 +540,11 @@ export default function App() {
       return;
     }
 
+    if (!clubForm.name.trim()) {
+      setNotice("Indica el nombre del club");
+      return;
+    }
+
     setClubLoading(true);
     setNotice("");
 
@@ -564,7 +565,7 @@ export default function App() {
     }
   }
 
-  async function handleCreateClubOpportunity() {
+  async function handleSaveClubOpportunity() {
     if (
       !session ||
       session.user.primaryRole !== "CLUB_MEMBER" ||
@@ -573,20 +574,41 @@ export default function App() {
       return;
     }
 
+    if (
+      !opportunityForm.title.trim() ||
+      !opportunityForm.primaryPosition.trim()
+    ) {
+      setNotice("Completa titulo y posicion de la convocatoria");
+      return;
+    }
+
     setClubLoading(true);
     setNotice("");
 
     try {
-      await createOpportunity(
-        session.accessToken,
-        buildCreateOpportunityPayload(
-          opportunityForm,
-          selectedClubMembership.club.id
-        )
-      );
+      if (editingOpportunityId) {
+        await updateOpportunity(
+          session.accessToken,
+          editingOpportunityId,
+          buildUpdateOpportunityPayload(opportunityForm)
+        );
+      } else {
+        await createOpportunity(
+          session.accessToken,
+          buildCreateOpportunityPayload(
+            opportunityForm,
+            selectedClubMembership.club.id
+          )
+        );
+      }
       setOpportunityForm(defaultOpportunityForm);
+      setEditingOpportunityId(null);
       await refreshClubWorkspace(session.accessToken, selectedClubMembership);
-      setNotice("Convocatoria creada como borrador");
+      setNotice(
+        editingOpportunityId
+          ? "Convocatoria actualizada"
+          : "Convocatoria creada como borrador"
+      );
     } catch (error) {
       setNotice(
         error instanceof Error
@@ -598,9 +620,21 @@ export default function App() {
     }
   }
 
+  function handleEditClubOpportunity(opportunity: Opportunity) {
+    setEditingOpportunityId(opportunity.id);
+    setOpportunityForm(opportunityToForm(opportunity));
+    setNotice("Editando convocatoria");
+  }
+
+  function handleCancelOpportunityEdit() {
+    setEditingOpportunityId(null);
+    setOpportunityForm(defaultOpportunityForm);
+    setNotice("");
+  }
+
   async function handleOpportunityStatusAction(
     opportunityId: string,
-    action: "publish" | "pause" | "close"
+    action: "publish" | "pause" | "close" | "delete"
   ) {
     if (
       !session ||
@@ -620,12 +654,19 @@ export default function App() {
       } else if (action === "pause") {
         await pauseOpportunity(session.accessToken, opportunityId);
         setNotice("Convocatoria pausada");
+      } else if (action === "delete") {
+        await deleteOpportunity(session.accessToken, opportunityId);
+        setNotice("Convocatoria eliminada o inactivada");
       } else {
         await closeOpportunity(session.accessToken, opportunityId);
         setNotice("Convocatoria cerrada");
       }
       await refreshClubWorkspace(session.accessToken, selectedClubMembership);
       await refreshOpportunities();
+      if (action === "delete" && editingOpportunityId === opportunityId) {
+        setEditingOpportunityId(null);
+        setOpportunityForm(defaultOpportunityForm);
+      }
     } catch (error) {
       setNotice(
         error instanceof Error
@@ -761,6 +802,7 @@ export default function App() {
             clubLoading={clubLoading}
             clubMemberships={clubMemberships}
             clubOpportunities={clubOpportunities}
+            editingOpportunityId={editingOpportunityId}
             opportunityForm={opportunityForm}
             selectedClubId={selectedClubId}
             selectedClubMembership={selectedClubMembership}
@@ -768,11 +810,13 @@ export default function App() {
             setClubForm={setClubForm}
             setOpportunityForm={setOpportunityForm}
             onApplicationStatus={handleClubApplicationStatus}
+            onCancelOpportunityEdit={handleCancelOpportunityEdit}
             onCreateClub={handleCreateClub}
-            onCreateOpportunity={handleCreateClubOpportunity}
+            onEditOpportunity={handleEditClubOpportunity}
             onLoginPress={() => setViewMode("account")}
             onOpportunityAction={handleOpportunityStatusAction}
             onRefresh={() => void refreshClubMemberships()}
+            onSaveOpportunity={handleSaveClubOpportunity}
             onSelectClub={(clubId) => {
               const membership = clubMemberships.find(
                 (currentMembership) => currentMembership.club.id === clubId
@@ -1074,6 +1118,7 @@ function ClubView({
   clubLoading,
   clubMemberships,
   clubOpportunities,
+  editingOpportunityId,
   opportunityForm,
   selectedClubId,
   selectedClubMembership,
@@ -1081,11 +1126,13 @@ function ClubView({
   setClubForm,
   setOpportunityForm,
   onApplicationStatus,
+  onCancelOpportunityEdit,
   onCreateClub,
-  onCreateOpportunity,
+  onEditOpportunity,
   onLoginPress,
   onOpportunityAction,
   onRefresh,
+  onSaveOpportunity,
   onSelectClub
 }: {
   clubApplications: ClubApplication[];
@@ -1093,6 +1140,7 @@ function ClubView({
   clubLoading: boolean;
   clubMemberships: ClubMembership[];
   clubOpportunities: Opportunity[];
+  editingOpportunityId: string | null;
   opportunityForm: OpportunityForm;
   selectedClubId: string | null;
   selectedClubMembership?: ClubMembership;
@@ -1102,14 +1150,16 @@ function ClubView({
     value: OpportunityForm | ((current: OpportunityForm) => OpportunityForm)
   ) => void;
   onApplicationStatus: (applicationId: string, status: string) => void;
+  onCancelOpportunityEdit: () => void;
   onCreateClub: () => void;
-  onCreateOpportunity: () => void;
+  onEditOpportunity: (opportunity: Opportunity) => void;
   onLoginPress: () => void;
   onOpportunityAction: (
     opportunityId: string,
-    action: "publish" | "pause" | "close"
+    action: "publish" | "pause" | "close" | "delete"
   ) => void;
   onRefresh: () => void;
+  onSaveOpportunity: () => void;
   onSelectClub: (clubId: string) => void;
 }) {
   function updateClubForm(field: keyof ClubForm, value: string) {
@@ -1150,7 +1200,7 @@ function ClubView({
         <View>
           <Text style={styles.panelTitle}>Portal club</Text>
           <Text style={styles.sectionHint}>
-            Crea clubes, prepara convocatorias y revisa candidatos.
+            Administra convocatorias y revisa candidatos inscritos.
           </Text>
         </View>
         {clubLoading ? <ActivityIndicator color="#157f58" /> : null}
@@ -1198,63 +1248,65 @@ function ClubView({
         )}
       </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.formTitle}>Crear club</Text>
-        <View style={styles.form}>
-          <TextInput
-            onChangeText={(value) => updateClubForm("name", value)}
-            placeholder="Nombre del club"
-            style={styles.input}
-            value={clubForm.name}
-          />
-          <View style={styles.inlineFields}>
+      {clubMemberships.length === 0 ? (
+        <View style={styles.panel}>
+          <Text style={styles.formTitle}>Crear club</Text>
+          <View style={styles.form}>
             <TextInput
-              onChangeText={(value) => updateClubForm("city", value)}
-              placeholder="Ciudad"
-              style={[styles.input, styles.inlineInput]}
-              value={clubForm.city}
+              onChangeText={(value) => updateClubForm("name", value)}
+              placeholder="Nombre del club"
+              style={styles.input}
+              value={clubForm.name}
+            />
+            <View style={styles.inlineFields}>
+              <TextInput
+                onChangeText={(value) => updateClubForm("city", value)}
+                placeholder="Ciudad"
+                style={[styles.input, styles.inlineInput]}
+                value={clubForm.city}
+              />
+              <TextInput
+                onChangeText={(value) => updateClubForm("province", value)}
+                placeholder="Provincia"
+                style={[styles.input, styles.inlineInput]}
+                value={clubForm.province}
+              />
+            </View>
+            <TextInput
+              onChangeText={(value) => updateClubForm("federationRegion", value)}
+              placeholder="Federacion territorial"
+              style={styles.input}
+              value={clubForm.federationRegion}
             />
             <TextInput
-              onChangeText={(value) => updateClubForm("province", value)}
-              placeholder="Provincia"
-              style={[styles.input, styles.inlineInput]}
-              value={clubForm.province}
+              autoCapitalize="none"
+              inputMode="email"
+              onChangeText={(value) => updateClubForm("contactEmail", value)}
+              placeholder="Email de contacto"
+              style={styles.input}
+              value={clubForm.contactEmail}
             />
+            <TextInput
+              autoCapitalize="none"
+              onChangeText={(value) => updateClubForm("website", value)}
+              placeholder="Web del club"
+              style={styles.input}
+              value={clubForm.website}
+            />
+            <Pressable
+              disabled={clubLoading}
+              onPress={onCreateClub}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.pressed,
+                clubLoading && styles.disabled
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Crear club</Text>
+            </Pressable>
           </View>
-          <TextInput
-            onChangeText={(value) => updateClubForm("federationRegion", value)}
-            placeholder="Federacion territorial"
-            style={styles.input}
-            value={clubForm.federationRegion}
-          />
-          <TextInput
-            autoCapitalize="none"
-            inputMode="email"
-            onChangeText={(value) => updateClubForm("contactEmail", value)}
-            placeholder="Email de contacto"
-            style={styles.input}
-            value={clubForm.contactEmail}
-          />
-          <TextInput
-            autoCapitalize="none"
-            onChangeText={(value) => updateClubForm("website", value)}
-            placeholder="Web del club"
-            style={styles.input}
-            value={clubForm.website}
-          />
-          <Pressable
-            disabled={clubLoading}
-            onPress={onCreateClub}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && styles.pressed,
-              clubLoading && styles.disabled
-            ]}
-          >
-            <Text style={styles.primaryButtonText}>Crear club</Text>
-          </Pressable>
         </View>
-      </View>
+      ) : null}
 
       {selectedClubMembership ? (
         <>
@@ -1283,7 +1335,11 @@ function ClubView({
           </View>
 
           <View style={styles.panel}>
-            <Text style={styles.formTitle}>Nueva convocatoria</Text>
+            <Text style={styles.formTitle}>
+              {editingOpportunityId
+                ? "Editar convocatoria"
+                : "Nueva convocatoria"}
+            </Text>
             <View style={styles.form}>
               <TextInput
                 onChangeText={(value) => updateOpportunityForm("title", value)}
@@ -1382,15 +1438,30 @@ function ClubView({
               </View>
               <Pressable
                 disabled={clubLoading}
-                onPress={onCreateOpportunity}
+                onPress={onSaveOpportunity}
                 style={({ pressed }) => [
                   styles.primaryButton,
                   pressed && styles.pressed,
                   clubLoading && styles.disabled
                 ]}
               >
-                <Text style={styles.primaryButtonText}>Crear borrador</Text>
+                <Text style={styles.primaryButtonText}>
+                  {editingOpportunityId ? "Guardar cambios" : "Crear borrador"}
+                </Text>
               </Pressable>
+              {editingOpportunityId ? (
+                <Pressable
+                  disabled={clubLoading}
+                  onPress={onCancelOpportunityEdit}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    pressed && styles.pressed,
+                    clubLoading && styles.disabled
+                  ]}
+                >
+                  <Text style={styles.secondaryButtonText}>Cancelar edicion</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
 
@@ -1412,7 +1483,21 @@ function ClubView({
                       {opportunity.primaryPosition} -{" "}
                       {opportunity.locationLabel ?? "Zona sin definir"}
                     </Text>
+                    <Text style={styles.itemMeta}>
+                      Edad: {formatAgeRange(opportunity)}
+                      {opportunity.requirements
+                        ? ` - Requisitos: ${opportunity.requirements}`
+                        : ""}
+                    </Text>
                     <View style={styles.actionRow}>
+                      {opportunity.status !== "CLOSED" ? (
+                        <Pressable
+                          onPress={() => onEditOpportunity(opportunity)}
+                          style={styles.secondaryButton}
+                        >
+                          <Text style={styles.secondaryButtonText}>Editar</Text>
+                        </Pressable>
+                      ) : null}
                       {opportunity.status !== "ACTIVE" ? (
                         <Pressable
                           disabled={!verifiedClub}
@@ -1444,6 +1529,25 @@ function ClubView({
                           style={styles.secondaryButton}
                         >
                           <Text style={styles.secondaryButtonText}>Cerrar</Text>
+                        </Pressable>
+                      ) : null}
+                      {opportunity.status !== "CLOSED" ? (
+                        <Pressable
+                          onPress={() =>
+                            onOpportunityAction(opportunity.id, "delete")
+                          }
+                          style={[styles.secondaryButton, styles.dangerButton]}
+                        >
+                          <Text
+                            style={[
+                              styles.secondaryButtonText,
+                              styles.dangerButtonText
+                            ]}
+                          >
+                            {opportunity.status === "DRAFT"
+                              ? "Eliminar"
+                              : "Inactivar"}
+                          </Text>
                         </Pressable>
                       ) : null}
                     </View>
@@ -1978,9 +2082,6 @@ function buildCreateOpportunityPayload(
   opportunityForm: OpportunityForm,
   clubId: string
 ): CreateOpportunityPayload {
-  const ageMin = Number.parseInt(opportunityForm.ageMin, 10);
-  const ageMax = Number.parseInt(opportunityForm.ageMax, 10);
-
   return {
     clubId,
     title: opportunityForm.title.trim(),
@@ -1989,13 +2090,60 @@ function buildCreateOpportunityPayload(
     gender: cleanString(opportunityForm.gender),
     modality: opportunityForm.modality,
     primaryPosition: opportunityForm.primaryPosition.trim(),
-    ageMin: Number.isFinite(ageMin) ? ageMin : undefined,
-    ageMax: Number.isFinite(ageMax) ? ageMax : undefined,
+    ageMin: parseOpportunityAge(opportunityForm.ageMin),
+    ageMax: parseOpportunityAge(opportunityForm.ageMax),
     locationLabel: cleanString(opportunityForm.locationLabel),
     level: cleanString(opportunityForm.level),
     opportunityType: opportunityForm.opportunityType,
     requirements: cleanString(opportunityForm.requirements)
   };
+}
+
+function buildUpdateOpportunityPayload(
+  opportunityForm: OpportunityForm
+): UpdateOpportunityPayload {
+  return {
+    title: opportunityForm.title.trim(),
+    description: opportunityForm.description.trim(),
+    category: cleanString(opportunityForm.category),
+    gender: cleanString(opportunityForm.gender),
+    modality: opportunityForm.modality,
+    primaryPosition: opportunityForm.primaryPosition.trim(),
+    ageMin: parseOpportunityAge(opportunityForm.ageMin, true),
+    ageMax: parseOpportunityAge(opportunityForm.ageMax, true),
+    locationLabel: cleanString(opportunityForm.locationLabel),
+    level: cleanString(opportunityForm.level),
+    opportunityType: opportunityForm.opportunityType,
+    requirements: cleanString(opportunityForm.requirements)
+  };
+}
+
+function opportunityToForm(opportunity: Opportunity): OpportunityForm {
+  return {
+    title: opportunity.title,
+    description: opportunity.description,
+    category: opportunity.category ?? "",
+    gender: opportunity.gender ?? defaultOpportunityForm.gender,
+    modality: opportunity.modality,
+    primaryPosition: opportunity.primaryPosition,
+    ageMin: opportunity.ageMin ? String(opportunity.ageMin) : "",
+    ageMax: opportunity.ageMax ? String(opportunity.ageMax) : "",
+    locationLabel: opportunity.locationLabel ?? "",
+    level: opportunity.level ?? "",
+    opportunityType: opportunity.opportunityType,
+    requirements: opportunity.requirements ?? ""
+  };
+}
+
+function parseOpportunityAge(value: string): number | undefined;
+function parseOpportunityAge(value: string, emptyAsNull: true): number | null;
+function parseOpportunityAge(value: string, emptyAsNull = false) {
+  const age = Number.parseInt(value, 10);
+  if (Number.isFinite(age)) {
+    return age;
+  }
+
+  return emptyAsNull ? null : undefined;
 }
 
 function buildProfilePayload(
@@ -2306,6 +2454,12 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: "#16201d",
     fontWeight: "800"
+  },
+  dangerButton: {
+    backgroundColor: "#fff0f0"
+  },
+  dangerButtonText: {
+    color: "#a23a34"
   },
   sessionText: {
     color: "#64726e"

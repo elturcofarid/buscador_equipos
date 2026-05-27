@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Gender, Modality, OpportunityType } from "@prisma/client";
 import {
   IsArray,
@@ -12,23 +12,16 @@ import {
   Min
 } from "class-validator";
 
-export class CreateOpportunityDto {
-  @ApiProperty()
+export class UpdateOpportunityDto {
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  clubId!: string;
+  title?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  teamId?: string;
-
-  @ApiProperty({ example: "Buscamos portero para senior preferente" })
-  @IsString()
-  title!: string;
-
-  @ApiProperty()
-  @IsString()
-  description!: string;
+  description?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -40,13 +33,15 @@ export class CreateOpportunityDto {
   @IsEnum(Gender)
   gender?: Gender;
 
-  @ApiProperty({ enum: Modality })
+  @ApiPropertyOptional({ enum: Modality })
+  @IsOptional()
   @IsEnum(Modality)
-  modality!: Modality;
+  modality?: Modality;
 
-  @ApiProperty({ example: "Portero" })
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  primaryPosition!: string;
+  primaryPosition?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
@@ -54,19 +49,19 @@ export class CreateOpportunityDto {
   @IsString({ each: true })
   secondaryPositions?: string[];
 
-  @ApiPropertyOptional({ minimum: 5 })
+  @ApiPropertyOptional({ minimum: 5, nullable: true })
   @IsOptional()
   @IsInt()
   @Min(5)
   @Max(99)
-  ageMin?: number;
+  ageMin?: number | null;
 
-  @ApiPropertyOptional({ minimum: 5 })
+  @ApiPropertyOptional({ minimum: 5, nullable: true })
   @IsOptional()
   @IsInt()
   @Min(5)
   @Max(99)
-  ageMax?: number;
+  ageMax?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -88,9 +83,10 @@ export class CreateOpportunityDto {
   @IsString()
   level?: string;
 
-  @ApiProperty({ enum: OpportunityType })
+  @ApiPropertyOptional({ enum: OpportunityType })
+  @IsOptional()
   @IsEnum(OpportunityType)
-  opportunityType!: OpportunityType;
+  opportunityType?: OpportunityType;
 
   @ApiPropertyOptional()
   @IsOptional()

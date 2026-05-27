@@ -168,6 +168,13 @@ export type CreateOpportunityPayload = {
   deadlineAt?: string;
 };
 
+export type UpdateOpportunityPayload = Partial<
+  Omit<CreateOpportunityPayload, "clubId" | "ageMin" | "ageMax">
+> & {
+  ageMin?: number | null;
+  ageMax?: number | null;
+};
+
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
@@ -247,6 +254,25 @@ export function createOpportunity(
     method: "POST",
     token,
     body: JSON.stringify(payload)
+  });
+}
+
+export function updateOpportunity(
+  token: string,
+  opportunityId: string,
+  payload: UpdateOpportunityPayload
+) {
+  return apiRequest<Opportunity>(`/opportunities/${opportunityId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteOpportunity(token: string, opportunityId: string) {
+  return apiRequest<Opportunity>(`/opportunities/${opportunityId}`, {
+    method: "DELETE",
+    token
   });
 }
 

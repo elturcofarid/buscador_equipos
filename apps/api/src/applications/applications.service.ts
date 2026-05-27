@@ -24,7 +24,14 @@ export class ApplicationsService {
     await this.assertPlayerAccount(userId);
 
     const playerProfile = await this.prisma.playerProfile.findUnique({
-      where: { userId }
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            dateOfBirth: true
+          }
+        }
+      }
     });
 
     if (!playerProfile) {
@@ -41,6 +48,11 @@ export class ApplicationsService {
     if (!opportunity) {
       throw new NotFoundException("Busqueda activa no encontrada");
     }
+
+    this.assertPlayerMeetsRestrictions(
+      playerProfile.user.dateOfBirth,
+      opportunity
+    );
 
     try {
       return await this.prisma.application.create({
@@ -232,5 +244,39 @@ export class ApplicationsService {
         "Esta accion solo esta disponible para cuentas de jugador"
       );
     }
+  }
+
+  private assertPlayerMeetsRestrictions(
+    dateOfBirth: Date,
+    opportunity: { ageMin: number | null; ageMax: number | null }
+  ) {
+    const playerAge = this.getAge(dateOfBirth);
+
+    if (opportunity.ageMin !== null && playerAge < opportunity.ageMin) {
+      throw new BadRequestException(
+        `Esta convocatoria requiere jugadores desde ${opportunity.ageMin} anos`
+      );
+    }
+
+    if (opportunity.ageMax !== null && playerAge > opportunity.ageMax) {
+      throw new BadRequestException(
+        `Esta convocatoria acepta jugadores hasta ${opportunity.ageMax} anos`
+      );
+    }
+  }
+
+  private getAge(dateOfBirth: Date) {
+    const today = new Date();
+    let age = today.getFullYear() - dateOfBirth.getFullYear();
+    const hasHadBirthdayThisYear =
+      today.getMonth() > dateOfBirth.getMonth() ||
+      (today.getMonth() === dateOfBirth.getMonth() &&
+        today.getDate() >= dateOfBirth.getDate());
+
+    if (!hasHadBirthdayThisYear) {
+      age -= 1;
+    }
+
+    return age;
   }
 }

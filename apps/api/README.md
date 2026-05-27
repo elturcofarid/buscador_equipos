@@ -43,6 +43,8 @@ puede operar en ambos modos.
 - `GET /api/v1/opportunities`
 - `GET /api/v1/opportunities/:opportunityId`
 - `POST /api/v1/opportunities`
+- `PATCH /api/v1/opportunities/:opportunityId`
+- `DELETE /api/v1/opportunities/:opportunityId`
 - `POST /api/v1/opportunities/:opportunityId/publish`
 - `POST /api/v1/opportunities/:opportunityId/pause`
 - `POST /api/v1/opportunities/:opportunityId/close`
@@ -54,6 +56,9 @@ puede operar en ambos modos.
 - `GET /api/v1/admin/clubs/pending`
 - `POST /api/v1/admin/clubs/:clubId/approve`
 - `POST /api/v1/admin/clubs/:clubId/reject`
+
+Las convocatorias admiten restricciones de edad. Al postular, la API rechaza a
+jugadores que no cumplan el rango configurado por el club.
 
 ## Documentacion interactiva
 
