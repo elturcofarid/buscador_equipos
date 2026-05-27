@@ -31,6 +31,8 @@ Fecha: 2026-05-26
 - Publicacion, pausa y cierre de convocatorias para clubes verificados.
 - Bloqueo de postulaciones cuando el jugador no cumple el rango de edad.
 - Gestion de estados de postulaciones recibidas.
+- Conversaciones por postulacion entre jugador y club.
+- Envio de mensajes asincronos desde ambos perfiles.
 - Export web para verificacion.
 - Servidor estatico local para evitar limite de watchers.
 
@@ -72,6 +74,10 @@ http://localhost:3004/api/v1
 - Navegacion mobile filtrada por rol jugador/club: OK.
 - Build API tras administracion de convocatorias: OK.
 - TypeScript mobile tras administracion de convocatorias: OK.
+- Build API tras mensajes: OK.
+- TypeScript mobile tras mensajes: OK.
+- Flujo API de conversacion jugador-club: OK.
+- Flujo navegador de mensajes jugador-club: OK.
 
 ## Resultado observado
 
@@ -94,6 +100,8 @@ http://localhost:3004/api/v1
 - Una cuenta club con club propio no ve el formulario de crear club en el portal.
 - El portal club permite editar, eliminar o inactivar convocatorias.
 - La API rechaza postulaciones fuera del rango de edad configurado.
+- Al postular se crea una conversacion asociada a la postulacion.
+- Jugador y club pueden responder en el mismo hilo de mensajes.
 
 ## Limitacion local
 
@@ -106,4 +114,4 @@ PORT=3007 npm run serve:web -w @bpf/mobile
 
 ## Siguiente paso recomendado
 
-- Sumar chat asincrono entre jugador y club.
+- Sumar notificaciones y contador de mensajes no leidos.

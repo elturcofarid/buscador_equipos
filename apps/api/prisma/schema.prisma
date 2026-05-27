@@ -93,6 +93,7 @@ model User {
 
   playerProfile  PlayerProfile?
   clubMemberships ClubMember[]
+  sentMessages    Message[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -121,6 +122,7 @@ model PlayerProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   applications Application[]
+  conversations Conversation[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -143,6 +145,7 @@ model Club {
   members ClubMember[]
   teams   Team[]
   opportunities Opportunity[]
+  conversations Conversation[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -230,6 +233,7 @@ model Application {
 
   opportunity   Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
   playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  conversation  Conversation?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -237,6 +241,43 @@ model Application {
   @@unique([opportunityId, playerProfileId])
   @@index([status])
   @@map("applications")
+}
+
+model Conversation {
+  id              String   @id @default(cuid())
+  applicationId   String   @unique @map("application_id")
+  clubId          String   @map("club_id")
+  playerProfileId String   @map("player_profile_id")
+  lastMessageAt   DateTime? @map("last_message_at")
+
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  club          Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  messages      Message[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([clubId])
+  @@index([playerProfileId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  conversationId String    @map("conversation_id")
+  senderUserId   String    @map("sender_user_id")
+  body           String
+  readAt         DateTime? @map("read_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUser   User         @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([conversationId, createdAt])
+  @@index([senderUserId])
+  @@map("messages")
 }
 
 model AuditLog {

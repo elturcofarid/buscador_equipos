@@ -6,6 +6,7 @@ import { ApplicationsModule } from "./applications/applications.module";
 import { AuthModule } from "./auth/auth.module";
 import { ClubsModule } from "./clubs/clubs.module";
 import { HealthModule } from "./health/health.module";
+import { MessagesModule } from "./messages/messages.module";
 import { OpportunitiesModule } from "./opportunities/opportunities.module";
 import { PlayersModule } from "./players/players.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -28,6 +29,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     ClubsModule,
     OpportunitiesModule,
     ApplicationsModule,
+    MessagesModule,
     AdminModule
   ]
 })

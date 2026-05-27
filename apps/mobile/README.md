@@ -31,6 +31,8 @@ http://localhost:3007
 - Publicar, pausar, cerrar, eliminar o inactivar convocatorias.
 - Configurar restricciones de edad y requisitos de cada convocatoria.
 - Ver y actualizar postulaciones recibidas por un club verificado.
+- Ver conversaciones por postulacion.
+- Enviar mensajes asincronos entre jugador y club.
 - Login de jugador.
 - Registro diferenciado como jugador o club.
 - Navegacion filtrada por tipo de cuenta.

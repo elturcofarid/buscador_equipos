@@ -54,21 +54,47 @@ export class ApplicationsService {
       opportunity
     );
 
+    const initialMessage = dto.message?.trim();
+
     try {
-      return await this.prisma.application.create({
-        data: {
-          opportunityId,
-          playerProfileId: playerProfile.id,
-          message: dto.message
-        },
-        include: {
-          opportunity: {
-            include: {
-              club: true
-            }
+      return await this.prisma.$transaction(async (tx) => {
+        const application = await tx.application.create({
+          data: {
+            opportunityId,
+            playerProfileId: playerProfile.id,
+            message: initialMessage
           },
-          playerProfile: true
-        }
+          include: {
+            opportunity: {
+              include: {
+                club: true
+              }
+            },
+            playerProfile: true
+          }
+        });
+
+        const createdAt = application.createdAt;
+
+        await tx.conversation.create({
+          data: {
+            applicationId: application.id,
+            clubId: opportunity.clubId,
+            playerProfileId: playerProfile.id,
+            lastMessageAt: initialMessage ? createdAt : undefined,
+            messages: initialMessage
+              ? {
+                  create: {
+                    senderUserId: userId,
+                    body: initialMessage,
+                    createdAt
+                  }
+                }
+              : undefined
+          }
+        });
+
+        return application;
       });
     } catch (error) {
       if (

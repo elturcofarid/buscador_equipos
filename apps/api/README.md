@@ -53,6 +53,10 @@ puede operar en ambos modos.
 - `GET /api/v1/clubs/:clubId/applications`
 - `PUT /api/v1/applications/:applicationId/status`
 - `POST /api/v1/applications/:applicationId/withdraw`
+- `GET /api/v1/conversations`
+- `GET /api/v1/applications/:applicationId/conversation`
+- `GET /api/v1/conversations/:conversationId/messages`
+- `POST /api/v1/conversations/:conversationId/messages`
 - `GET /api/v1/admin/clubs/pending`
 - `POST /api/v1/admin/clubs/:clubId/approve`
 - `POST /api/v1/admin/clubs/:clubId/reject`

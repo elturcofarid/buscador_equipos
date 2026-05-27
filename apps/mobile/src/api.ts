@@ -124,6 +124,47 @@ export type ClubApplication = {
   };
 };
 
+export type ConversationMessage = {
+  id: string;
+  conversationId: string;
+  senderUserId: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+  senderUser: {
+    id: string;
+    fullName: string;
+    primaryRole: string;
+  };
+};
+
+export type Conversation = {
+  id: string;
+  applicationId: string;
+  clubId: string;
+  playerProfileId: string;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  club: Club;
+  application: {
+    id: string;
+    message: string | null;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    opportunity: Opportunity;
+  };
+  playerProfile: PlayerProfile & {
+    user: {
+      id: string;
+      email: string;
+      fullName: string;
+    };
+  };
+  messages: ConversationMessage[];
+};
+
 export type PlayerProfilePayload = {
   displayName?: string;
   gender?: string;
@@ -313,6 +354,46 @@ export function updateApplicationStatus(
     token,
     body: JSON.stringify({ status })
   });
+}
+
+export function listConversations(token: string, clubId?: string | null) {
+  const query = clubId ? `?clubId=${encodeURIComponent(clubId)}` : "";
+  return apiRequest<Conversation[]>(`/conversations${query}`, { token });
+}
+
+export function getApplicationConversation(
+  token: string,
+  applicationId: string
+) {
+  return apiRequest<Conversation>(
+    `/applications/${applicationId}/conversation`,
+    { token }
+  );
+}
+
+export function listConversationMessages(
+  token: string,
+  conversationId: string
+) {
+  return apiRequest<ConversationMessage[]>(
+    `/conversations/${conversationId}/messages`,
+    { token }
+  );
+}
+
+export function sendConversationMessage(
+  token: string,
+  conversationId: string,
+  body: string
+) {
+  return apiRequest<ConversationMessage>(
+    `/conversations/${conversationId}/messages`,
+    {
+      method: "POST",
+      token,
+      body: JSON.stringify({ body })
+    }
+  );
 }
 
 export function getPlayerProfile(token: string) {

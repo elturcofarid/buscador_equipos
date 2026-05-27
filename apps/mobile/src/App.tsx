@@ -16,6 +16,8 @@ import {
   API_BASE_URL,
   ClubApplication,
   ClubMembership,
+  Conversation,
+  ConversationMessage,
   CreateClubPayload,
   CreateOpportunityPayload,
   Opportunity,
@@ -31,8 +33,11 @@ import {
   deleteOpportunity,
   getCurrentSession,
   getPlayerProfile,
+  getApplicationConversation,
   listClubApplications,
   listClubOpportunities,
+  listConversationMessages,
+  listConversations,
   listMyClubMemberships,
   listMyApplications,
   listOpportunities,
@@ -41,6 +46,7 @@ import {
   publishOpportunity,
   registerPlayer,
   savePlayerProfile,
+  sendConversationMessage,
   updateOpportunity,
   updateApplicationStatus,
   withdrawApplication
@@ -55,6 +61,7 @@ type ViewMode =
   | "search"
   | "opportunityDetail"
   | "applications"
+  | "messages"
   | "club"
   | "account";
 type AuthMode = "login" | "register";
@@ -151,18 +158,27 @@ export default function App() {
   const [clubApplications, setClubApplications] = useState<ClubApplication[]>(
     []
   );
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationMessages, setConversationMessages] = useState<
+    ConversationMessage[]
+  >([]);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<
     string | null
   >(null);
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    string | null
+  >(null);
   const [editingOpportunityId, setEditingOpportunityId] = useState<string | null>(
     null
   );
   const [message, setMessage] = useState(
     "Estoy disponible para una prueba esta semana."
   );
+  const [messageDraft, setMessageDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [clubLoading, setClubLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [sessionRestoring, setSessionRestoring] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -180,6 +196,13 @@ export default function App() {
         (membership) => membership.club.id === selectedClubId
       ) ?? clubMemberships[0],
     [clubMemberships, selectedClubId]
+  );
+  const selectedConversation = useMemo(
+    () =>
+      conversations.find(
+        (conversation) => conversation.id === selectedConversationId
+      ) ?? conversations[0],
+    [conversations, selectedConversationId]
   );
   const isPlayerSession = session?.user.primaryRole === "PLAYER";
   const isClubSession = session?.user.primaryRole === "CLUB_MEMBER";
@@ -236,6 +259,78 @@ export default function App() {
     }
   }
 
+  async function refreshConversations(
+    authToken = session?.accessToken,
+    role = session?.user.primaryRole,
+    clubId = role === "CLUB_MEMBER" ? selectedClubId : undefined
+  ) {
+    if (!authToken || (role !== "PLAYER" && role !== "CLUB_MEMBER")) {
+      setConversations([]);
+      setConversationMessages([]);
+      setSelectedConversationId(null);
+      return;
+    }
+
+    setMessagesLoading(true);
+
+    try {
+      const result = await listConversations(
+        authToken,
+        role === "CLUB_MEMBER" ? clubId : undefined
+      );
+      setConversations(result);
+
+      const nextConversationId =
+        result.find(
+          (conversation) => conversation.id === selectedConversationId
+        )?.id ?? result[0]?.id ?? null;
+      setSelectedConversationId(nextConversationId);
+
+      if (nextConversationId) {
+        const messages = await listConversationMessages(
+          authToken,
+          nextConversationId
+        );
+        setConversationMessages(messages);
+      } else {
+        setConversationMessages([]);
+      }
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar mensajes"
+      );
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
+
+  async function refreshConversationMessages(
+    authToken = session?.accessToken,
+    conversationId = selectedConversationId
+  ) {
+    if (!authToken || !conversationId) {
+      setConversationMessages([]);
+      return;
+    }
+
+    setMessagesLoading(true);
+
+    try {
+      const messages = await listConversationMessages(authToken, conversationId);
+      setConversationMessages(messages);
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar mensajes"
+      );
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
+
   async function refreshClubMemberships(
     authToken = session?.accessToken,
     role = session?.user.primaryRole
@@ -244,7 +339,10 @@ export default function App() {
       setClubMemberships([]);
       setClubOpportunities([]);
       setClubApplications([]);
+      setConversations([]);
+      setConversationMessages([]);
       setSelectedClubId(null);
+      setSelectedConversationId(null);
       return;
     }
 
@@ -346,6 +444,10 @@ export default function App() {
     if (nextSession.user.primaryRole === "PLAYER") {
       await ensurePlayerProfile(nextSession);
       await refreshApplications(nextSession.accessToken, nextSession.user.primaryRole);
+      await refreshConversations(
+        nextSession.accessToken,
+        nextSession.user.primaryRole
+      );
       setClubMemberships([]);
       setClubOpportunities([]);
       setClubApplications([]);
@@ -356,6 +458,11 @@ export default function App() {
       await refreshClubMemberships(
         nextSession.accessToken,
         nextSession.user.primaryRole
+      );
+      await refreshConversations(
+        nextSession.accessToken,
+        nextSession.user.primaryRole,
+        undefined
       );
       setViewMode("club");
     }
@@ -468,6 +575,7 @@ export default function App() {
         message
       );
       await refreshApplications(session.accessToken);
+      await refreshConversations(session.accessToken, session.user.primaryRole);
       setViewMode("applications");
       setNotice("Postulacion enviada");
       if (Platform.OS !== "web") {
@@ -493,6 +601,7 @@ export default function App() {
     try {
       await withdrawApplication(session.accessToken, applicationId);
       await refreshApplications(session.accessToken);
+      await refreshConversations(session.accessToken, session.user.primaryRole);
       setNotice("Postulacion retirada");
     } catch (error) {
       setNotice(
@@ -708,6 +817,91 @@ export default function App() {
     }
   }
 
+  async function handleOpenApplicationConversation(applicationId: string) {
+    if (!session) {
+      setViewMode("account");
+      setNotice("Inicia sesion para ver mensajes");
+      return;
+    }
+
+    setMessagesLoading(true);
+    setNotice("");
+
+    try {
+      const conversation = await getApplicationConversation(
+        session.accessToken,
+        applicationId
+      );
+      setConversations((currentConversations) =>
+        upsertConversation(currentConversations, conversation)
+      );
+      setSelectedConversationId(conversation.id);
+      const messages = await listConversationMessages(
+        session.accessToken,
+        conversation.id
+      );
+      setConversationMessages(messages);
+      setMessageDraft("");
+      setViewMode("messages");
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo abrir la conversacion"
+      );
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
+
+  async function handleSelectConversation(conversationId: string) {
+    setSelectedConversationId(conversationId);
+    await refreshConversationMessages(session?.accessToken, conversationId);
+  }
+
+  async function handleSendConversationMessage() {
+    if (!session || !selectedConversation) {
+      return;
+    }
+
+    if (!messageDraft.trim()) {
+      setNotice("Escribe un mensaje");
+      return;
+    }
+
+    setMessagesLoading(true);
+    setNotice("");
+
+    try {
+      const sentMessage = await sendConversationMessage(
+        session.accessToken,
+        selectedConversation.id,
+        messageDraft
+      );
+      setConversationMessages((currentMessages) => [
+        ...currentMessages,
+        sentMessage
+      ]);
+      setMessageDraft("");
+      await refreshConversations(
+        session.accessToken,
+        session.user.primaryRole,
+        session.user.primaryRole === "CLUB_MEMBER" ? selectedClubId : undefined
+      );
+      setSelectedConversationId(selectedConversation.id);
+      await refreshConversationMessages(
+        session.accessToken,
+        selectedConversation.id
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "No se pudo enviar el mensaje"
+      );
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
+
   async function logout() {
     await clearStoredSession();
     setSession(null);
@@ -715,8 +909,12 @@ export default function App() {
     setClubMemberships([]);
     setClubOpportunities([]);
     setClubApplications([]);
+    setConversations([]);
+    setConversationMessages([]);
     setSelectedClubId(null);
+    setSelectedConversationId(null);
     setPassword("");
+    setMessageDraft("");
     setNotice("");
     setViewMode("account");
   }
@@ -736,6 +934,7 @@ export default function App() {
               void refreshOpportunities();
               void refreshApplications();
               void refreshClubMemberships();
+              void refreshConversations();
             }}
           >
             <Text style={styles.iconText}>R</Text>
@@ -789,9 +988,28 @@ export default function App() {
             applications={applications}
             loading={loading}
             session={session}
+            onOpenConversation={handleOpenApplicationConversation}
             onLoginPress={() => setViewMode("account")}
             onRefresh={() => void refreshApplications()}
             onWithdraw={handleWithdraw}
+          />
+        ) : null}
+
+        {viewMode === "messages" ? (
+          <MessagesView
+            conversations={conversations}
+            loading={messagesLoading}
+            messageDraft={messageDraft}
+            messages={conversationMessages}
+            selectedConversation={selectedConversation}
+            selectedConversationId={selectedConversationId}
+            session={session}
+            setMessageDraft={setMessageDraft}
+            onLoginPress={() => setViewMode("account")}
+            onRefresh={() => void refreshConversations()}
+            onRefreshMessages={() => void refreshConversationMessages()}
+            onSelectConversation={handleSelectConversation}
+            onSendMessage={handleSendConversationMessage}
           />
         ) : null}
 
@@ -813,9 +1031,13 @@ export default function App() {
             onCancelOpportunityEdit={handleCancelOpportunityEdit}
             onCreateClub={handleCreateClub}
             onEditOpportunity={handleEditClubOpportunity}
+            onOpenConversation={handleOpenApplicationConversation}
             onLoginPress={() => setViewMode("account")}
             onOpportunityAction={handleOpportunityStatusAction}
-            onRefresh={() => void refreshClubMemberships()}
+            onRefresh={() => {
+              void refreshClubMemberships();
+              void refreshConversations();
+            }}
             onSaveOpportunity={handleSaveClubOpportunity}
             onSelectClub={(clubId) => {
               const membership = clubMemberships.find(
@@ -824,6 +1046,11 @@ export default function App() {
               setSelectedClubId(clubId);
               if (membership && session) {
                 void refreshClubWorkspace(session.accessToken, membership);
+                void refreshConversations(
+                  session.accessToken,
+                  session.user.primaryRole,
+                  clubId
+                );
               }
             }}
           />
@@ -860,6 +1087,7 @@ export default function App() {
       <BottomNavigation
         applicationsCount={applications.length}
         clubCount={clubMemberships.length}
+        messagesCount={conversations.length}
         sessionActive={Boolean(session)}
         sessionRole={session?.user.primaryRole}
         viewMode={viewMode}
@@ -867,6 +1095,9 @@ export default function App() {
           setViewMode(nextViewMode);
           if (nextViewMode === "applications") {
             void refreshApplications();
+          }
+          if (nextViewMode === "messages") {
+            void refreshConversations();
           }
         }}
       />
@@ -1044,6 +1275,7 @@ function ApplicationsView({
   loading,
   session,
   onLoginPress,
+  onOpenConversation,
   onRefresh,
   onWithdraw
 }: {
@@ -1051,6 +1283,7 @@ function ApplicationsView({
   loading: boolean;
   session: Session | null;
   onLoginPress: () => void;
+  onOpenConversation: (applicationId: string) => void;
   onRefresh: () => void;
   onWithdraw: (applicationId: string) => void;
 }) {
@@ -1096,18 +1329,199 @@ function ApplicationsView({
               {application.message ? (
                 <Text style={styles.description}>{application.message}</Text>
               ) : null}
-              {application.status !== "WITHDRAWN" ? (
+              <View style={styles.actionRow}>
                 <Pressable
-                  onPress={() => onWithdraw(application.id)}
+                  onPress={() => onOpenConversation(application.id)}
                   style={styles.secondaryButton}
                 >
-                  <Text style={styles.secondaryButtonText}>Retirar</Text>
+                  <Text style={styles.secondaryButtonText}>Mensajes</Text>
                 </Pressable>
-              ) : null}
+                {application.status !== "WITHDRAWN" ? (
+                  <Pressable
+                    onPress={() => onWithdraw(application.id)}
+                    style={styles.secondaryButton}
+                  >
+                    <Text style={styles.secondaryButtonText}>Retirar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           ))}
         </View>
       )}
+    </View>
+  );
+}
+
+function MessagesView({
+  conversations,
+  loading,
+  messageDraft,
+  messages,
+  selectedConversation,
+  selectedConversationId,
+  session,
+  setMessageDraft,
+  onLoginPress,
+  onRefresh,
+  onRefreshMessages,
+  onSelectConversation,
+  onSendMessage
+}: {
+  conversations: Conversation[];
+  loading: boolean;
+  messageDraft: string;
+  messages: ConversationMessage[];
+  selectedConversation?: Conversation;
+  selectedConversationId: string | null;
+  session: Session | null;
+  setMessageDraft: (value: string) => void;
+  onLoginPress: () => void;
+  onRefresh: () => void;
+  onRefreshMessages: () => void;
+  onSelectConversation: (conversationId: string) => void | Promise<void>;
+  onSendMessage: () => void;
+}) {
+  if (!session) {
+    return (
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Mensajes</Text>
+        <Text style={styles.emptyText}>Inicia sesion para ver tus conversaciones.</Text>
+        <Pressable onPress={onLoginPress} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Ir a cuenta</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.panel}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.panelTitle}>Mensajes</Text>
+          {loading ? <ActivityIndicator color="#157f58" /> : null}
+        </View>
+        <Pressable onPress={onRefresh} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Actualizar</Text>
+        </Pressable>
+
+        {conversations.length === 0 ? (
+          <Text style={styles.emptyText}>Todavia no hay conversaciones.</Text>
+        ) : (
+          <View style={styles.list}>
+            {conversations.map((conversation) => {
+              const latestMessage = conversation.messages[0];
+              const active = conversation.id === selectedConversationId;
+
+              return (
+                <Pressable
+                  key={conversation.id}
+                  onPress={() => onSelectConversation(conversation.id)}
+                  style={({ pressed }) => [
+                    styles.opportunityItem,
+                    active && styles.opportunityItemActive,
+                    pressed && styles.pressed
+                  ]}
+                >
+                  <View style={styles.itemHeader}>
+                    <Text style={styles.itemTitle}>
+                      {formatConversationTitle(conversation, session)}
+                    </Text>
+                    <Text style={styles.statusBadge}>
+                      {formatApplicationStatus(conversation.application.status)}
+                    </Text>
+                  </View>
+                  <Text style={styles.itemMeta}>
+                    {conversation.application.opportunity.title}
+                  </Text>
+                  <Text style={styles.description}>
+                    {latestMessage
+                      ? latestMessage.body
+                      : "Conversacion abierta"}
+                  </Text>
+                  <Text style={styles.itemMeta}>
+                    {formatConversationDate(
+                      conversation.lastMessageAt ?? conversation.createdAt
+                    )}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      {selectedConversation ? (
+        <View style={styles.panel}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.formTitle}>
+                {formatConversationTitle(selectedConversation, session)}
+              </Text>
+              <Text style={styles.sectionHint}>
+                {selectedConversation.application.opportunity.title}
+              </Text>
+            </View>
+            <Pressable onPress={onRefreshMessages} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Actualizar</Text>
+            </Pressable>
+          </View>
+
+          {messages.length === 0 ? (
+            <Text style={styles.emptyText}>No hay mensajes todavia.</Text>
+          ) : (
+            <View style={styles.messageList}>
+              {messages.map((conversationMessage) => {
+                const ownMessage =
+                  conversationMessage.senderUserId === session.user.id;
+
+                return (
+                  <View
+                    key={conversationMessage.id}
+                    style={[
+                      styles.messageBubble,
+                      ownMessage && styles.messageBubbleOwn
+                    ]}
+                  >
+                    <Text style={styles.messageAuthor}>
+                      {ownMessage
+                        ? "Tu"
+                        : conversationMessage.senderUser.fullName}
+                    </Text>
+                    <Text style={styles.messageBody}>
+                      {conversationMessage.body}
+                    </Text>
+                    <Text style={styles.messageDate}>
+                      {formatConversationDate(conversationMessage.createdAt)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={styles.form}>
+            <TextInput
+              multiline
+              onChangeText={setMessageDraft}
+              placeholder="Escribe un mensaje"
+              style={[styles.input, styles.messageInput]}
+              value={messageDraft}
+            />
+            <Pressable
+              disabled={loading}
+              onPress={onSendMessage}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.pressed,
+                loading && styles.disabled
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Enviar mensaje</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1130,6 +1544,7 @@ function ClubView({
   onCreateClub,
   onEditOpportunity,
   onLoginPress,
+  onOpenConversation,
   onOpportunityAction,
   onRefresh,
   onSaveOpportunity,
@@ -1154,6 +1569,7 @@ function ClubView({
   onCreateClub: () => void;
   onEditOpportunity: (opportunity: Opportunity) => void;
   onLoginPress: () => void;
+  onOpenConversation: (applicationId: string) => void;
   onOpportunityAction: (
     opportunityId: string,
     action: "publish" | "pause" | "close" | "delete"
@@ -1593,6 +2009,12 @@ function ClubView({
                     ) : null}
                     <View style={styles.actionRow}>
                       <Pressable
+                        onPress={() => onOpenConversation(application.id)}
+                        style={styles.secondaryButton}
+                      >
+                        <Text style={styles.secondaryButtonText}>Mensajes</Text>
+                      </Pressable>
+                      <Pressable
                         onPress={() =>
                           onApplicationStatus(application.id, "VIEWED")
                         }
@@ -1931,6 +2353,7 @@ function AccountView({
 function BottomNavigation({
   applicationsCount,
   clubCount,
+  messagesCount,
   sessionActive,
   sessionRole,
   viewMode,
@@ -1938,10 +2361,13 @@ function BottomNavigation({
 }: {
   applicationsCount: number;
   clubCount: number;
+  messagesCount: number;
   sessionActive: boolean;
   sessionRole?: string;
   viewMode: ViewMode;
-  onSelect: (nextViewMode: "search" | "applications" | "club" | "account") => void;
+  onSelect: (
+    nextViewMode: "search" | "applications" | "messages" | "club" | "account"
+  ) => void;
 }) {
   const showPlayerNavigation = !sessionRole || sessionRole === "PLAYER";
   const showClubNavigation = sessionRole === "CLUB_MEMBER";
@@ -1972,6 +2398,14 @@ function BottomNavigation({
           label="Club"
           meta={String(clubCount)}
           onPress={() => onSelect("club")}
+        />
+      ) : null}
+      {sessionRole ? (
+        <BottomNavigationButton
+          active={viewMode === "messages"}
+          label="Mensajes"
+          meta={String(messagesCount)}
+          onPress={() => onSelect("messages")}
         />
       ) : null}
       <BottomNavigationButton
@@ -2146,6 +2580,48 @@ function parseOpportunityAge(value: string, emptyAsNull = false) {
   return emptyAsNull ? null : undefined;
 }
 
+function upsertConversation(
+  conversations: Conversation[],
+  conversation: Conversation
+) {
+  const exists = conversations.some(
+    (currentConversation) => currentConversation.id === conversation.id
+  );
+
+  if (exists) {
+    return conversations.map((currentConversation) =>
+      currentConversation.id === conversation.id
+        ? conversation
+        : currentConversation
+    );
+  }
+
+  return [conversation, ...conversations];
+}
+
+function formatConversationTitle(
+  conversation: Conversation,
+  session: Session
+) {
+  if (session.user.primaryRole === "PLAYER") {
+    return conversation.club.name;
+  }
+
+  return (
+    conversation.playerProfile.displayName ??
+    conversation.playerProfile.user.fullName
+  );
+}
+
+function formatConversationDate(value: string) {
+  return new Date(value).toLocaleString("es-ES", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit"
+  });
+}
+
 function buildProfilePayload(
   profileForm: ProfileForm,
   fallbackDisplayName: string
@@ -2187,6 +2663,7 @@ function getScreenTitle(viewMode: ViewMode) {
     account: "Cuenta",
     applications: "Postulaciones",
     club: "Club",
+    messages: "Mensajes",
     opportunityDetail: "Detalle",
     search: "Buscador Futbol"
   };
@@ -2542,6 +3019,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8
+  },
+  messageList: {
+    gap: 10
+  },
+  messageBubble: {
+    alignSelf: "flex-start",
+    backgroundColor: "#f1f5f4",
+    borderRadius: 8,
+    gap: 4,
+    maxWidth: "88%",
+    padding: 10
+  },
+  messageBubbleOwn: {
+    alignSelf: "flex-end",
+    backgroundColor: "#def0e9"
+  },
+  messageAuthor: {
+    color: "#0f5e42",
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  messageBody: {
+    color: "#16201d",
+    lineHeight: 20
+  },
+  messageDate: {
+    color: "#64726e",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "right"
   },
   linkText: {
     color: "#157f58",
