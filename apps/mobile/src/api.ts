@@ -1,5 +1,21 @@
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3004/api/v1";
+type RuntimeConfigGlobal = typeof globalThis & {
+  SCOUTGOL_CONFIG?: {
+    API_BASE_URL?: string;
+  };
+};
+
+export const API_BASE_URL = resolveApiBaseUrl();
+
+function resolveApiBaseUrl() {
+  const runtimeApiUrl = (globalThis as RuntimeConfigGlobal).SCOUTGOL_CONFIG
+    ?.API_BASE_URL;
+
+  return (
+    runtimeApiUrl ??
+    process.env.EXPO_PUBLIC_API_BASE_URL ??
+    "http://localhost:3004/api/v1"
+  );
+}
 
 export type RegisterPayload = {
   email: string;

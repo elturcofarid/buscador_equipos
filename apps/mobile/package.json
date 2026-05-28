@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "expo start",
     "web": "expo start --web --port 3007",
-    "build": "expo export --platform web",
+    "build": "expo export --platform web && node scripts/write-runtime-config.js",
     "serve:web": "node scripts/serve-web.js"
   },
   "dependencies": {
