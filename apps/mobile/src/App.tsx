@@ -15,6 +15,7 @@ import {
 import {
   API_BASE_URL,
   ClubApplication,
+  ClubCatalogItem,
   ClubMembership,
   Conversation,
   ConversationMessage,
@@ -34,6 +35,7 @@ import {
   getCurrentSession,
   getPlayerProfile,
   getApplicationConversation,
+  listClubCatalog,
   listClubApplications,
   listClubOpportunities,
   listConversationMessages,
@@ -45,6 +47,7 @@ import {
   pauseOpportunity,
   publishOpportunity,
   registerPlayer,
+  requestClubMembership,
   savePlayerProfile,
   sendConversationMessage,
   updateOpportunity,
@@ -73,6 +76,12 @@ type ClubForm = {
   federationRegion: string;
   contactEmail: string;
   website: string;
+};
+type ClubCatalogFilterForm = {
+  search: string;
+  federation: string;
+  category: string;
+  level: string;
 };
 type OpportunityForm = {
   title: string;
@@ -121,6 +130,13 @@ const defaultClubForm: ClubForm = {
   website: ""
 };
 
+const defaultClubCatalogFilters: ClubCatalogFilterForm = {
+  search: "",
+  federation: "RFFM",
+  category: "",
+  level: ""
+};
+
 const defaultOpportunityForm: OpportunityForm = {
   title: "Buscamos jugador para prueba",
   description: "Convocatoria abierta para realizar una prueba con el equipo.",
@@ -149,6 +165,12 @@ export default function App() {
   const [profileForm, setProfileForm] =
     useState<ProfileForm>(defaultProfileForm);
   const [clubForm, setClubForm] = useState<ClubForm>(defaultClubForm);
+  const [clubCatalogFilters, setClubCatalogFilters] =
+    useState<ClubCatalogFilterForm>(defaultClubCatalogFilters);
+  const [clubCatalog, setClubCatalog] = useState<ClubCatalogItem[]>([]);
+  const [selectedCatalogClub, setSelectedCatalogClub] =
+    useState<ClubCatalogItem | null>(null);
+  const [manualClubMode, setManualClubMode] = useState(false);
   const [opportunityForm, setOpportunityForm] =
     useState<OpportunityForm>(defaultOpportunityForm);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -178,6 +200,7 @@ export default function App() {
   const [messageDraft, setMessageDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [clubLoading, setClubLoading] = useState(false);
+  const [clubCatalogLoading, setClubCatalogLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sessionRestoring, setSessionRestoring] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -375,6 +398,35 @@ export default function App() {
     }
   }
 
+  async function refreshClubCatalog(
+    authToken = session?.accessToken,
+    role = session?.user.primaryRole
+  ) {
+    if (!authToken || role !== "CLUB_MEMBER") {
+      setClubCatalog([]);
+      return;
+    }
+
+    setClubCatalogLoading(true);
+    setNotice("");
+
+    try {
+      const result = await listClubCatalog(authToken, {
+        ...clubCatalogFilters,
+        limit: 30
+      });
+      setClubCatalog(result);
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo cargar el catalogo de clubes"
+      );
+    } finally {
+      setClubCatalogLoading(false);
+    }
+  }
+
   async function refreshClubWorkspace(
     authToken = session?.accessToken,
     membership = selectedClubMembership
@@ -451,11 +503,18 @@ export default function App() {
       setClubMemberships([]);
       setClubOpportunities([]);
       setClubApplications([]);
+      setClubCatalog([]);
+      setSelectedCatalogClub(null);
+      setManualClubMode(false);
       setSelectedClubId(null);
       setViewMode("search");
     } else if (nextSession.user.primaryRole === "CLUB_MEMBER") {
       setApplications([]);
       await refreshClubMemberships(
+        nextSession.accessToken,
+        nextSession.user.primaryRole
+      );
+      await refreshClubCatalog(
         nextSession.accessToken,
         nextSession.user.primaryRole
       );
@@ -516,6 +575,24 @@ export default function App() {
       ...currentProfile,
       [field]: value
     }));
+  }
+
+  function handleSelectCatalogClub(club: ClubCatalogItem) {
+    setSelectedCatalogClub(club);
+    setManualClubMode(false);
+    setClubForm(catalogClubToForm(club));
+  }
+
+  function handleUseManualClub() {
+    setSelectedCatalogClub(null);
+    setManualClubMode(true);
+    setClubForm(defaultClubForm);
+  }
+
+  function handleClearCatalogSelection() {
+    setSelectedCatalogClub(null);
+    setManualClubMode(false);
+    setClubForm(defaultClubForm);
   }
 
   async function handleLogin() {
@@ -658,6 +735,22 @@ export default function App() {
     setNotice("");
 
     try {
+      if (selectedCatalogClub) {
+        const membership = await requestClubMembership(
+          session.accessToken,
+          selectedCatalogClub.id,
+          { role: "OWNER", verificationMethod: "federation_catalog" }
+        );
+        setSelectedCatalogClub(null);
+        setManualClubMode(false);
+        setClubForm(defaultClubForm);
+        await refreshClubMemberships(session.accessToken);
+        setSelectedClubId(membership.club.id);
+        setViewMode("club");
+        setNotice("Solicitud enviada. El admin validara la gestion del club.");
+        return;
+      }
+
       const createdClub = await createClub(
         session.accessToken,
         buildCreateClubPayload(clubForm)
@@ -909,10 +1002,14 @@ export default function App() {
     setClubMemberships([]);
     setClubOpportunities([]);
     setClubApplications([]);
+    setClubCatalog([]);
+    setClubCatalogFilters(defaultClubCatalogFilters);
     setConversations([]);
     setConversationMessages([]);
     setSelectedClubId(null);
+    setSelectedCatalogClub(null);
     setSelectedConversationId(null);
+    setManualClubMode(false);
     setPassword("");
     setMessageDraft("");
     setNotice("");
@@ -934,6 +1031,7 @@ export default function App() {
               void refreshOpportunities();
               void refreshApplications();
               void refreshClubMemberships();
+              void refreshClubCatalog();
               void refreshConversations();
             }}
           >
@@ -1016,19 +1114,26 @@ export default function App() {
         {viewMode === "club" ? (
           <ClubView
             clubApplications={clubApplications}
+            clubCatalog={clubCatalog}
+            clubCatalogFilters={clubCatalogFilters}
+            clubCatalogLoading={clubCatalogLoading}
             clubForm={clubForm}
             clubLoading={clubLoading}
             clubMemberships={clubMemberships}
             clubOpportunities={clubOpportunities}
             editingOpportunityId={editingOpportunityId}
+            manualClubMode={manualClubMode}
             opportunityForm={opportunityForm}
+            selectedCatalogClub={selectedCatalogClub}
             selectedClubId={selectedClubId}
             selectedClubMembership={selectedClubMembership}
             session={session}
+            setClubCatalogFilters={setClubCatalogFilters}
             setClubForm={setClubForm}
             setOpportunityForm={setOpportunityForm}
             onApplicationStatus={handleClubApplicationStatus}
             onCancelOpportunityEdit={handleCancelOpportunityEdit}
+            onClearCatalogSelection={handleClearCatalogSelection}
             onCreateClub={handleCreateClub}
             onEditOpportunity={handleEditClubOpportunity}
             onOpenConversation={handleOpenApplicationConversation}
@@ -1036,9 +1141,11 @@ export default function App() {
             onOpportunityAction={handleOpportunityStatusAction}
             onRefresh={() => {
               void refreshClubMemberships();
+              void refreshClubCatalog();
               void refreshConversations();
             }}
             onSaveOpportunity={handleSaveClubOpportunity}
+            onSearchClubCatalog={() => void refreshClubCatalog()}
             onSelectClub={(clubId) => {
               const membership = clubMemberships.find(
                 (currentMembership) => currentMembership.club.id === clubId
@@ -1053,6 +1160,8 @@ export default function App() {
                 );
               }
             }}
+            onSelectCatalogClub={handleSelectCatalogClub}
+            onUseManualClub={handleUseManualClub}
           />
         ) : null}
 
@@ -1528,19 +1637,26 @@ function MessagesView({
 
 function ClubView({
   clubApplications,
+  clubCatalog,
+  clubCatalogFilters,
+  clubCatalogLoading,
   clubForm,
   clubLoading,
   clubMemberships,
   clubOpportunities,
   editingOpportunityId,
+  manualClubMode,
   opportunityForm,
+  selectedCatalogClub,
   selectedClubId,
   selectedClubMembership,
   session,
+  setClubCatalogFilters,
   setClubForm,
   setOpportunityForm,
   onApplicationStatus,
   onCancelOpportunityEdit,
+  onClearCatalogSelection,
   onCreateClub,
   onEditOpportunity,
   onLoginPress,
@@ -1548,24 +1664,38 @@ function ClubView({
   onOpportunityAction,
   onRefresh,
   onSaveOpportunity,
-  onSelectClub
+  onSearchClubCatalog,
+  onSelectClub,
+  onSelectCatalogClub,
+  onUseManualClub
 }: {
   clubApplications: ClubApplication[];
+  clubCatalog: ClubCatalogItem[];
+  clubCatalogFilters: ClubCatalogFilterForm;
+  clubCatalogLoading: boolean;
   clubForm: ClubForm;
   clubLoading: boolean;
   clubMemberships: ClubMembership[];
   clubOpportunities: Opportunity[];
   editingOpportunityId: string | null;
+  manualClubMode: boolean;
   opportunityForm: OpportunityForm;
+  selectedCatalogClub: ClubCatalogItem | null;
   selectedClubId: string | null;
   selectedClubMembership?: ClubMembership;
   session: Session | null;
+  setClubCatalogFilters: (
+    value:
+      | ClubCatalogFilterForm
+      | ((current: ClubCatalogFilterForm) => ClubCatalogFilterForm)
+  ) => void;
   setClubForm: (value: ClubForm | ((current: ClubForm) => ClubForm)) => void;
   setOpportunityForm: (
     value: OpportunityForm | ((current: OpportunityForm) => OpportunityForm)
   ) => void;
   onApplicationStatus: (applicationId: string, status: string) => void;
   onCancelOpportunityEdit: () => void;
+  onClearCatalogSelection: () => void;
   onCreateClub: () => void;
   onEditOpportunity: (opportunity: Opportunity) => void;
   onLoginPress: () => void;
@@ -1576,11 +1706,21 @@ function ClubView({
   ) => void;
   onRefresh: () => void;
   onSaveOpportunity: () => void;
+  onSearchClubCatalog: () => void;
   onSelectClub: (clubId: string) => void;
+  onSelectCatalogClub: (club: ClubCatalogItem) => void;
+  onUseManualClub: () => void;
 }) {
   function updateClubForm(field: keyof ClubForm, value: string) {
     setClubForm((currentForm) => ({
       ...currentForm,
+      [field]: value
+    }));
+  }
+
+  function updateCatalogFilter(field: keyof ClubCatalogFilterForm, value: string) {
+    setClubCatalogFilters((currentFilters) => ({
+      ...currentFilters,
       [field]: value
     }));
   }
@@ -1609,6 +1749,8 @@ function ClubView({
   const verifiedClub = selectedClubMembership
     ? isVerifiedClubMembership(selectedClubMembership)
     : false;
+  const catalogClubSelected = Boolean(selectedCatalogClub);
+  const showCreateClubForm = manualClubMode || catalogClubSelected;
 
   return (
     <View style={styles.screen}>
@@ -1665,63 +1807,227 @@ function ClubView({
       </View>
 
       {clubMemberships.length === 0 ? (
-        <View style={styles.panel}>
-          <Text style={styles.formTitle}>Crear club</Text>
-          <View style={styles.form}>
-            <TextInput
-              onChangeText={(value) => updateClubForm("name", value)}
-              placeholder="Nombre del club"
-              style={styles.input}
-              value={clubForm.name}
-            />
-            <View style={styles.inlineFields}>
-              <TextInput
-                onChangeText={(value) => updateClubForm("city", value)}
-                placeholder="Ciudad"
-                style={[styles.input, styles.inlineInput]}
-                value={clubForm.city}
-              />
-              <TextInput
-                onChangeText={(value) => updateClubForm("province", value)}
-                placeholder="Provincia"
-                style={[styles.input, styles.inlineInput]}
-                value={clubForm.province}
-              />
+        <>
+          <View style={styles.panel}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.formTitle}>Buscar club</Text>
+                <Text style={styles.sectionHint}>
+                  Catalogo federativo
+                </Text>
+              </View>
+              {clubCatalogLoading ? <ActivityIndicator color="#157f58" /> : null}
             </View>
-            <TextInput
-              onChangeText={(value) => updateClubForm("federationRegion", value)}
-              placeholder="Federacion territorial"
-              style={styles.input}
-              value={clubForm.federationRegion}
-            />
-            <TextInput
-              autoCapitalize="none"
-              inputMode="email"
-              onChangeText={(value) => updateClubForm("contactEmail", value)}
-              placeholder="Email de contacto"
-              style={styles.input}
-              value={clubForm.contactEmail}
-            />
-            <TextInput
-              autoCapitalize="none"
-              onChangeText={(value) => updateClubForm("website", value)}
-              placeholder="Web del club"
-              style={styles.input}
-              value={clubForm.website}
-            />
-            <Pressable
-              disabled={clubLoading}
-              onPress={onCreateClub}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && styles.pressed,
-                clubLoading && styles.disabled
-              ]}
-            >
-              <Text style={styles.primaryButtonText}>Crear club</Text>
-            </Pressable>
+            <View style={styles.form}>
+              <TextInput
+                onChangeText={(value) => updateCatalogFilter("search", value)}
+                placeholder="Nombre, codigo o localidad"
+                style={styles.input}
+                value={clubCatalogFilters.search}
+              />
+              <View style={styles.inlineFields}>
+                <TextInput
+                  onChangeText={(value) =>
+                    updateCatalogFilter("federation", value)
+                  }
+                  placeholder="Federacion"
+                  style={[styles.input, styles.inlineInput]}
+                  value={clubCatalogFilters.federation}
+                />
+                <TextInput
+                  onChangeText={(value) =>
+                    updateCatalogFilter("category", value)
+                  }
+                  placeholder="Categoria"
+                  style={[styles.input, styles.inlineInput]}
+                  value={clubCatalogFilters.category}
+                />
+              </View>
+              <TextInput
+                onChangeText={(value) => updateCatalogFilter("level", value)}
+                placeholder="Nivel"
+                style={styles.input}
+                value={clubCatalogFilters.level}
+              />
+              <View style={styles.actionRow}>
+                <Pressable
+                  disabled={clubCatalogLoading}
+                  onPress={onSearchClubCatalog}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    pressed && styles.pressed,
+                    clubCatalogLoading && styles.disabled
+                  ]}
+                >
+                  <Text style={styles.primaryButtonText}>Buscar</Text>
+                </Pressable>
+                <Pressable
+                  disabled={clubLoading}
+                  onPress={onUseManualClub}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    pressed && styles.pressed,
+                    clubLoading && styles.disabled
+                  ]}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    Crear manualmente
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {clubCatalog.length > 0 ? (
+              <View style={styles.list}>
+                {clubCatalog.map((club) => {
+                  const active = club.id === selectedCatalogClub?.id;
+                  return (
+                    <Pressable
+                      key={club.id}
+                      onPress={() => onSelectCatalogClub(club)}
+                      style={({ pressed }) => [
+                        styles.opportunityItem,
+                        active && styles.opportunityItemActive,
+                        pressed && styles.pressed
+                      ]}
+                    >
+                      <View style={styles.itemHeader}>
+                        <Text style={styles.itemTitle}>{club.name}</Text>
+                        <Text style={styles.badge}>
+                          {club.federationSource ?? "Catalogo"}
+                        </Text>
+                      </View>
+                      <Text style={styles.itemMeta}>
+                        {club.city ?? "Sin localidad"} -{" "}
+                        {club.province ?? "Sin provincia"}
+                      </Text>
+                      {club.teams.length > 0 ? (
+                        <Text style={styles.itemMeta}>
+                          {formatCatalogTeams(club)}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.linkText}>
+                        {active ? "Seleccionado" : "Usar este club"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
           </View>
-        </View>
+
+          {showCreateClubForm ? (
+            <View style={styles.panel}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={styles.formTitle}>
+                    {catalogClubSelected ? "Datos del club" : "Crear club"}
+                  </Text>
+                  {catalogClubSelected ? (
+                    <Text style={styles.sectionHint}>
+                      Origen: catalogo federativo
+                    </Text>
+                  ) : null}
+                </View>
+                {catalogClubSelected ? (
+                  <Pressable
+                    disabled={clubLoading}
+                    onPress={onClearCatalogSelection}
+                    style={styles.secondaryButton}
+                  >
+                    <Text style={styles.secondaryButtonText}>Elegir otro</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <View style={styles.form}>
+                <TextInput
+                  editable={!catalogClubSelected}
+                  onChangeText={(value) => updateClubForm("name", value)}
+                  placeholder="Nombre del club"
+                  style={[
+                    styles.input,
+                    catalogClubSelected && styles.readOnlyInput
+                  ]}
+                  value={clubForm.name}
+                />
+                <View style={styles.inlineFields}>
+                  <TextInput
+                    editable={!catalogClubSelected}
+                    onChangeText={(value) => updateClubForm("city", value)}
+                    placeholder="Ciudad"
+                    style={[
+                      styles.input,
+                      styles.inlineInput,
+                      catalogClubSelected && styles.readOnlyInput
+                    ]}
+                    value={clubForm.city}
+                  />
+                  <TextInput
+                    editable={!catalogClubSelected}
+                    onChangeText={(value) => updateClubForm("province", value)}
+                    placeholder="Provincia"
+                    style={[
+                      styles.input,
+                      styles.inlineInput,
+                      catalogClubSelected && styles.readOnlyInput
+                    ]}
+                    value={clubForm.province}
+                  />
+                </View>
+                <TextInput
+                  editable={!catalogClubSelected}
+                  onChangeText={(value) =>
+                    updateClubForm("federationRegion", value)
+                  }
+                  placeholder="Federacion territorial"
+                  style={[
+                    styles.input,
+                    catalogClubSelected && styles.readOnlyInput
+                  ]}
+                  value={clubForm.federationRegion}
+                />
+                <TextInput
+                  autoCapitalize="none"
+                  editable={!catalogClubSelected}
+                  inputMode="email"
+                  onChangeText={(value) => updateClubForm("contactEmail", value)}
+                  placeholder="Email de contacto"
+                  style={[
+                    styles.input,
+                    catalogClubSelected && styles.readOnlyInput
+                  ]}
+                  value={clubForm.contactEmail}
+                />
+                <TextInput
+                  autoCapitalize="none"
+                  editable={!catalogClubSelected}
+                  onChangeText={(value) => updateClubForm("website", value)}
+                  placeholder="Web del club"
+                  style={[
+                    styles.input,
+                    catalogClubSelected && styles.readOnlyInput
+                  ]}
+                  value={clubForm.website}
+                />
+                <Pressable
+                  disabled={clubLoading}
+                  onPress={onCreateClub}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    pressed && styles.pressed,
+                    clubLoading && styles.disabled
+                  ]}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {catalogClubSelected
+                      ? "Solicitar gestion del club"
+                      : "Crear club"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </>
       ) : null}
 
       {selectedClubMembership ? (
@@ -2501,6 +2807,17 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
+function catalogClubToForm(club: ClubCatalogItem): ClubForm {
+  return {
+    name: club.name,
+    city: club.city ?? "",
+    province: club.province ?? "",
+    federationRegion: club.federationRegion ?? club.federationSource ?? "",
+    contactEmail: club.contactEmail ?? club.correspondenceEmail ?? "",
+    website: club.website ?? ""
+  };
+}
+
 function buildCreateClubPayload(clubForm: ClubForm): CreateClubPayload {
   return {
     name: clubForm.name.trim(),
@@ -2510,6 +2827,19 @@ function buildCreateClubPayload(clubForm: ClubForm): CreateClubPayload {
     contactEmail: cleanString(clubForm.contactEmail),
     website: cleanString(clubForm.website)
   };
+}
+
+function formatCatalogTeams(club: ClubCatalogItem) {
+  const teams = club.teams
+    .map((team) => team.category ?? team.name)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .slice(0, 3);
+
+  if (teams.length === 0) {
+    return "Sin equipos asociados";
+  }
+
+  return `Equipos: ${teams.join(", ")}`;
 }
 
 function buildCreateOpportunityPayload(
@@ -2907,6 +3237,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 10
+  },
+  readOnlyInput: {
+    backgroundColor: "#eef4f2",
+    color: "#46534f"
   },
   primaryButton: {
     alignItems: "center",

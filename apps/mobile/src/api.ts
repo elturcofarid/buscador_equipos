@@ -94,14 +94,33 @@ export type Club = {
   name: string;
   normalizedName?: string;
   federationRegion: string | null;
+  federationSource?: string | null;
+  federationCode?: string | null;
   city: string | null;
   province: string | null;
   country: string;
   website: string | null;
   contactEmail: string | null;
+  phone?: string | null;
+  address?: string | null;
+  postalCode?: string | null;
+  correspondenceEmail?: string | null;
   verificationStatus: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ClubCatalogTeam = {
+  id: string;
+  name: string;
+  category: string | null;
+  season: string | null;
+  modality: string | null;
+  inCompetition: boolean | null;
+};
+
+export type ClubCatalogItem = Club & {
+  teams: ClubCatalogTeam[];
 };
 
 export type ClubMembership = {
@@ -207,6 +226,14 @@ export type CreateClubPayload = {
   contactEmail?: string;
 };
 
+export type ClubCatalogFilters = {
+  search?: string;
+  federation?: string;
+  category?: string;
+  level?: string;
+  limit?: number;
+};
+
 export type CreateOpportunityPayload = {
   clubId: string;
   title: string;
@@ -291,6 +318,37 @@ export function listMyClubMemberships(token: string) {
 
 export function createClub(token: string, payload: CreateClubPayload) {
   return apiRequest<Club>("/clubs", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listClubCatalog(
+  token: string,
+  filters: ClubCatalogFilters = {}
+) {
+  const query = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && String(value).trim().length > 0) {
+      query.set(key, String(value).trim());
+    }
+  });
+
+  const queryString = query.toString();
+  return apiRequest<ClubCatalogItem[]>(
+    `/clubs/catalog${queryString ? `?${queryString}` : ""}`,
+    { token }
+  );
+}
+
+export function requestClubMembership(
+  token: string,
+  clubId: string,
+  payload: { role?: string; verificationMethod?: string } = {}
+) {
+  return apiRequest<ClubMembership>(`/clubs/${clubId}/join-request`, {
     method: "POST",
     token,
     body: JSON.stringify(payload)

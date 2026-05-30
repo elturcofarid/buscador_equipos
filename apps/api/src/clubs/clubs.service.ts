@@ -12,6 +12,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateClubDto } from "./dto/create-club.dto";
 import { JoinClubDto } from "./dto/join-club.dto";
+import { ListClubCatalogDto } from "./dto/list-club-catalog.dto";
 
 @Injectable()
 export class ClubsService {
@@ -56,6 +57,119 @@ export class ClubsService {
       orderBy: {
         createdAt: "desc"
       }
+    });
+  }
+
+  async getCatalog(userId: string, dto: ListClubCatalogDto) {
+    await this.assertClubAccount(userId);
+
+    const where: Prisma.ClubWhereInput[] = [
+      {
+        federationSource: {
+          not: null
+        }
+      },
+      {
+        verificationStatus: {
+          notIn: [VerificationStatus.REJECTED, VerificationStatus.REVOKED]
+        }
+      }
+    ];
+    const federation = this.cleanFilter(dto.federation);
+    const category = this.cleanFilter(dto.category);
+    const level = this.cleanFilter(dto.level);
+    const search = this.cleanFilter(dto.search);
+
+    if (federation) {
+      where.push({
+        OR: [
+          {
+            federationSource: {
+              contains: federation,
+              mode: "insensitive"
+            }
+          },
+          {
+            federationRegion: {
+              contains: federation,
+              mode: "insensitive"
+            }
+          }
+        ]
+      });
+    }
+
+    if (category) {
+      where.push({
+        teams: {
+          some: this.teamTextFilter(category)
+        }
+      });
+    }
+
+    if (level) {
+      where.push({
+        teams: {
+          some: this.teamTextFilter(level)
+        }
+      });
+    }
+
+    if (search) {
+      where.push({
+        OR: [
+          {
+            name: {
+              contains: search,
+              mode: "insensitive"
+            }
+          },
+          {
+            normalizedName: {
+              contains: this.normalizeName(search)
+            }
+          },
+          {
+            federationCode: {
+              contains: search,
+              mode: "insensitive"
+            }
+          },
+          {
+            city: {
+              contains: search,
+              mode: "insensitive"
+            }
+          },
+          {
+            province: {
+              contains: search,
+              mode: "insensitive"
+            }
+          },
+          {
+            teams: {
+              some: this.teamTextFilter(search)
+            }
+          }
+        ]
+      });
+    }
+
+    const limit = Math.min(Math.max(dto.limit ?? 25, 1), 50);
+
+    return this.prisma.club.findMany({
+      where: {
+        AND: where
+      },
+      include: {
+        teams: {
+          orderBy: [{ season: "desc" }, { category: "asc" }, { name: "asc" }],
+          take: 8
+        }
+      },
+      orderBy: [{ federationSource: "asc" }, { name: "asc" }],
+      take: limit
     });
   }
 
@@ -109,6 +223,30 @@ export class ClubsService {
       .replace(/[\u0300-\u036f]/g, "")
       .trim()
       .toLowerCase();
+  }
+
+  private cleanFilter(value?: string) {
+    const trimmedValue = value?.trim();
+    return trimmedValue && trimmedValue.length > 0 ? trimmedValue : undefined;
+  }
+
+  private teamTextFilter(value: string): Prisma.TeamWhereInput {
+    return {
+      OR: [
+        {
+          name: {
+            contains: value,
+            mode: "insensitive"
+          }
+        },
+        {
+          category: {
+            contains: value,
+            mode: "insensitive"
+          }
+        }
+      ]
+    };
   }
 
   private async assertHasClubMembership(userId: string, clubId: string) {

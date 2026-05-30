@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   AuthenticatedUser,
@@ -8,6 +16,7 @@ import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { ClubsService } from "./clubs.service";
 import { CreateClubDto } from "./dto/create-club.dto";
 import { JoinClubDto } from "./dto/join-club.dto";
+import { ListClubCatalogDto } from "./dto/list-club-catalog.dto";
 
 @ApiTags("clubs")
 @ApiBearerAuth()
@@ -24,6 +33,14 @@ export class ClubsController {
   @Get("mine")
   getMine(@CurrentUser() user: AuthenticatedUser) {
     return this.clubsService.getMyMemberships(user.id);
+  }
+
+  @Get("catalog")
+  getCatalog(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() dto: ListClubCatalogDto
+  ) {
+    return this.clubsService.getCatalog(user.id, dto);
   }
 
   @Get(":clubId/opportunities")
